@@ -1,0 +1,15 @@
+{
+  "name": "webex-service-app-provider-sample",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Customer-initiated Webex Service App organization linking and directory sample",
+  "license": "MIT",
+  "engines": { "node": ">=24.13.0 <25" },
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "start": "node --env-file-if-exists=.env server.mjs",
+    "test": "node --test",
+    "check": "node scripts/check.mjs"
+  }
+}
