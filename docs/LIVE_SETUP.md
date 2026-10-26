@@ -31,11 +31,12 @@ The provider administrator signs into the sample locally and selects **Connect p
 Create a regular OAuth Integration for customer verification. Select:
 
 - `spark:people_read` — read the authenticated person's details.
+- `spark-admin:people_read` — include the authenticated administrator's assigned roles in their profile.
 - `spark-admin:roles_read` — resolve the administrative role IDs returned on that person's profile.
 
 Set the callback to `<BASE_URL>/oauth/customer/callback`. Set `CUSTOMER_INTEGRATION_CLIENT_ID` and `CUSTOMER_INTEGRATION_CLIENT_SECRET` in `.env`.
 
-The callback reads `/people/me`, requires a human account, derives its `orgId`, and checks the person's role IDs against the **Full Administrator** role returned by `/roles`. Merely being able to enumerate roles is not accepted as proof. Missing role data or insufficient permission fails closed. Role availability with this scope combination is an explicit live acceptance item, not assumed from the mocked tests. Do not relax the check to organization membership if it fails.
+The callback reads `/people/me`, requires a human account, derives its `orgId`, and checks the person's role IDs against the **Full Administrator** role returned by `/roles`. Merely being able to enumerate roles is not accepted as proof. Missing role data or insufficient permission fails closed. In the October 26, 2026 sandbox run, `spark:people_read` plus `spark-admin:roles_read` returned the role catalog but omitted the person's assigned roles. Adding `spark-admin:people_read` returned those assignments and allowed verification. Include the admin people-read scope in both the registration and OAuth request; existing installations must authorize the added permission. Do not relax the check to organization membership if role data is absent.
 
 This is an OAuth API-authorization flow, not an OpenID Connect ID-token flow. It verifies a Webex identity for a user who is **already authenticated to the provider account**. No email-domain matching or account merging occurs.
 
@@ -80,6 +81,8 @@ Replace the placeholders privately, and repeat with `event: authorized`. Setup g
 An `authorized` event never links accounts, retrieves tokens, or reactivates service. A valid `deauthorized` event triggers an organization-details request using only the already-stored Service App access token. If Webex denies that request, the callback deletes local credentials and advances the connection revision. If access remains valid, the notification does not discard a potentially newer connection. Repeated notifications while disconnected have no effect. Transient upstream failures return a non-2xx response; they do not establish revocation. An expired access token can also trigger conservative disconnection during this check. The original tenant claim remains reserved until its customer explicitly disconnects.
 
 Without subscriptions, deauthorization is detected only on the next failed Service App API call. HTTP 401/403 from a customer directory/refresh call removes saved credentials and disables that connection. Other upstream failures retain the connection and can be retried. The UI is request-driven, not a push notification channel.
+
+In the [live sandbox run](VALIDATION.md), an existing access token still read the directory immediately after Control Hub deauthorization, while a fresh application-token request was denied. Neither the next-read check nor the webhook's current-access recheck guarantees immediate revocation if Webex still accepts an existing token. Local disconnect removes saved credentials and the account link immediately. After reauthorization, the customer must verify and explicitly confirm a new link.
 
 ## Troubleshooting
 

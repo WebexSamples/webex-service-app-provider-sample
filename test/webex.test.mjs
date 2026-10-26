@@ -6,12 +6,14 @@ import { orgKey, vault, random, hashPassword, verifyPassword } from '../lib/secu
 
 const response = (data, status = 200, headers = {}) => new Response(JSON.stringify(data), { status, headers });
 test('identity checks the authenticated person role, not merely an administrator-visible roles list', async () => {
-  let isAdmin = false;
+  let roles;
   const api = createWebex({}, async url => url.pathname === '/v1/people/me'
-    ? response({ id: 'person', orgId: 'org-one', type: 'person', roles: isAdmin ? ['full-admin-id'] : ['member-id'] })
+    ? response({ id: 'person', orgId: 'org-one', type: 'person', roles })
     : response({ items: [{ id: 'full-admin-id', name: 'Full Administrator' }] }));
   await assert.rejects(api.identity(random()), error => error.code === 'admin_required');
-  isAdmin = true;
+  roles = ['member-id'];
+  await assert.rejects(api.identity(random()), error => error.code === 'admin_required');
+  roles = ['full-admin-id'];
   assert.equal((await api.identity(random())).orgId, 'org-one');
 });
 test('directory pagination rejects hostile URLs and cross-organization responses', async () => {
