@@ -21,21 +21,26 @@ Requires **Node.js 24.13 or later in the 24.x release line**. The server uses No
 git clone https://github.com/WebexSamples/webex-service-app-provider-sample.git
 cd webex-service-app-provider-sample
 npm ci --ignore-scripts
-npm run setup
 npm start
 ```
 
-Choose `demo` during setup. Set a password of 12–256 characters for each local account; passwords are hidden during interactive entry and stored as salted scrypt hashes. There are no default passwords.
+No environment variables or `.env` file are required. On first launch, open the **private setup link printed in the terminal**. It contains a one-use code for creating the provider administrator account. Choose your email and a 12–256 character password; there are no default passwords.
 
-Open [http://localhost:3000](http://localhost:3000). Setup creates:
+The provider's **Webex registrations** screen supports an existing Service App, an existing provider Integration, both, or neither. For missing registrations, it shows the Webex portal link, required scopes, and exact callbacks. Create those registrations in Webex, then paste their credentials into the app. Customer verification still uses a separate Integration. You can save one complete registration at a time and finish the others later.
 
-| Experience | Local account | Provider tenant |
-| --- | --- | --- |
-| Provider administrator | `provider@example.test` | Provider console |
-| Customer administrator | `summit@example.test` | Summit Outfitters |
-| Customer administrator | `northstar@example.test` | Northstar Travel |
+![First-run provider registration choices with no credentials entered](docs/screenshots/provider-setup.png)
 
-Use separate browser profiles or private browsing contexts for simultaneous sessions. Different tabs in one profile share the same account session.
+Saved secrets are encrypted in the mode's SQLite database and never returned to the browser. The app generates `.data/master.key` with mode `0600` inside a `0700` directory. Back up that key separately from the databases; losing it makes saved credentials unreadable. Existing `.env` configuration is supported for migration: the app preserves its encryption key and imports the registration credentials into encrypted storage. After verifying the migration and backing up the key, you can remove the old `.env` file. New secrets are managed through the UI.
+
+Use **Create a sample customer sign-in** to add a separate local account for Summit Outfitters or Northstar Travel. Choose its email and password and share them privately with your tester. Use separate browser profiles for simultaneous provider/customer sessions; tabs in one profile share a session.
+
+For fictional demo data, stop live mode and run:
+
+```sh
+npm start -- --demo
+```
+
+Demo and live mode have separate databases and accounts. Complete the same protected first-run account setup if that mode has no accounts yet. Demo mode doesn't require Webex registrations. Older installations keep their existing local accounts. Use `npm start -- --live` to override a legacy demo-mode setting without editing `.env`.
 
 ### Try the demo
 
@@ -56,7 +61,7 @@ Follow [live setup](docs/LIVE_SETUP.md). It describes the Service App, the two s
 
 Before App Hub approval, validate real APIs inside the Service App developer's organization. The provider and customer **application accounts** remain separate; this does not establish external-organization availability. [App Hub transition](docs/APP_HUB_TRANSITION.md) lists the remaining changes and acceptance tests.
 
-The app binds to loopback. An HTTPS tunnel or reverse proxy can expose it for OAuth callbacks and webhooks; configure its exact public origin as `BASE_URL`, preserve the public Host header, and keep it bound to loopback. This is not authorization to deploy the sample or create Webex apps automatically.
+The app binds to loopback. An HTTPS tunnel or reverse proxy can expose it for OAuth callbacks and webhooks; start with `npm start -- --origin https://sample.example.com`, preserve that public Host header, and keep the server bound to loopback. Use `--port 3001` to change the local listener. This is not authorization to deploy the sample or create Webex apps automatically.
 
 ## Checks
 
@@ -74,6 +79,7 @@ For browser smoke tests, install Python Playwright and its Chromium browser in a
 | Path | Purpose |
 | --- | --- |
 | `server.mjs` | Loopback HTTP server and startup |
+| `lib/config.mjs` | Private local key creation and registration-field allow-list |
 | `lib/app.mjs` | Sessions, permissions, OAuth, linking, directory, lifecycle events |
 | `lib/webex.mjs` | Fixed-origin Webex API calls and response validation |
 | `lib/security.mjs` | Password hashing, authenticated encryption, identity normalization |
@@ -81,7 +87,7 @@ For browser smoke tests, install Python Playwright and its Chromium browser in a
 | `public/` | Browser UI with Momentum Design; no secrets or CDN requests |
 | `test/` | Node's built-in test runner |
 
-Mode-specific databases live in `.data/demo.sqlite` and `.data/live.sqlite`. Sessions, pending OAuth states, and short-lived identity proofs live only in memory and expire; restarting requires sign-in and a fresh verification. Directory entries are returned to the customer's browser and are not persisted in SQLite. Tokens are encrypted with tenant-bound AES-256-GCM; the ignored `.env` contains the local encryption key and configured Webex client secrets. Back up the key separately from the database. Changing or losing the key makes saved credentials unreadable.
+Mode-specific databases live in `.data/demo.sqlite` and `.data/live.sqlite`. Sessions, pending OAuth states, and short-lived identity proofs live only in memory and expire; restarting requires sign-in and a fresh verification. Directory entries are returned to the customer's browser and are not persisted in SQLite. Tokens and registration credentials are encrypted with AES-256-GCM under separate authenticated contexts; the ignored `.data/master.key` holds the local encryption key. Back up the key separately from the database. Changing or losing the key makes saved credentials unreadable.
 
 Keep `.env`, `.data/`, runtime artifacts, and customer data out of Git. See [security boundaries](SECURITY.md), [contributing](CONTRIBUTING.md), and the [MIT license](LICENSE).
 

@@ -6,12 +6,14 @@ import { openStore, seedTenants } from '../lib/store.mjs';
 import { random, vault, AppError } from '../lib/security.mjs';
 import { createApp } from '../lib/app.mjs';
 
-async function fixture(t, mode = 'demo', webex) {
+async function fixture(t, mode = 'demo', webex, options = {}) {
   const store = openStore(':memory:'); seedTenants(store);
   const password = random();
-  store.addAccount('provider@example.test', 'Provider', password, 'provider');
-  store.addAccount('summit@example.test', 'Summit admin', password, 'customer', 'summit');
-  store.addAccount('northstar@example.test', 'Northstar admin', password, 'customer', 'northstar');
+  if (!options.empty) {
+    store.addAccount('provider@example.test', 'Provider', password, 'provider');
+    store.addAccount('summit@example.test', 'Summit admin', password, 'customer', 'summit');
+    store.addAccount('northstar@example.test', 'Northstar admin', password, 'customer', 'northstar');
+  }
   let app;
   const server = createServer((req, res) => app.handler(req, res));
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -19,8 +21,8 @@ async function fixture(t, mode = 'demo', webex) {
     ENCRYPTION_KEY: randomBytes(32).toString('base64'), PROVIDER_WEBEX_PERSON_ID: 'developer-person',
     PROVIDER_INTEGRATION_CLIENT_ID: random(), PROVIDER_INTEGRATION_CLIENT_SECRET: random(),
     CUSTOMER_INTEGRATION_CLIENT_ID: random(), CUSTOMER_INTEGRATION_CLIENT_SECRET: random(),
-    SERVICE_APP_ID: 'expected-app', SERVICE_APP_CLIENT_ID: random(), SERVICE_APP_CLIENT_SECRET: random(), WEBHOOK_SECRET: random() };
-  app = createApp(config, store, { webex });
+    SERVICE_APP_ID: 'expected-app', SERVICE_APP_CLIENT_ID: random(), SERVICE_APP_CLIENT_SECRET: random(), WEBHOOK_SECRET: random(), ...options.config };
+  app = createApp(config, store, { ...options, webex });
   t.after(async () => { app.close(); await new Promise(resolve => server.close(resolve)); store.close(); });
   function client() {
     let cookie = '', csrf = '';
@@ -42,7 +44,9 @@ async function fixture(t, mode = 'demo', webex) {
     };
   }
   const provider = client(), summit = client(), northstar = client();
-  await provider.login('provider@example.test'); await summit.login('summit@example.test'); await northstar.login('northstar@example.test');
+  if (!options.empty) {
+    await provider.login('provider@example.test'); await summit.login('summit@example.test'); await northstar.login('northstar@example.test');
+  }
   return { store, config, provider, summit, northstar, client };
 }
 async function approve(f, org = 'demo-summit') {
@@ -63,7 +67,8 @@ test('Momentum assets are served locally without exposing package files or relax
     assert.match(response.headers.get('content-security-policy'), /script-src 'self'; style-src 'self';/);
     assert.ok((await response.arrayBuffer()).byteLength > 100);
   }
-  for (const path of ['/vendor/package.json', '/node_modules/@momentum-design/components/package.json', '/vendor/%2e%2e/.env']) {
+  for (const path of ['/vendor/package.json', '/node_modules/@momentum-design/components/package.json', '/vendor/%2e%2e/.env',
+    '/.env', '/.data/master.key', '/.data/live.sqlite']) {
     assert.equal((await f.provider.request(path)).status, 404);
   }
 });
@@ -237,4 +242,110 @@ test('a failed old directory request cannot erase credentials from a newer conne
   assert.equal((await oldRequest).status, 502);
   const row = f.store.get("SELECT * FROM tenants WHERE id='summit'");
   assert.equal(row.status, 'Connected'); assert.equal(row.credentials, newer);
+});
+
+test('first-run provider setup requires the terminal code, rotates the session, and cannot be repeated', async t => {
+  const setupToken = random(), password = random();
+  const f = await fixture(t, 'live', undefined, { empty: true, managedConfiguration: true, setupToken });
+  const initial = (await f.provider.request('/api/session')).data;
+  assert.equal(initial.setupRequired, true);
+  assert.equal((await f.provider.request('/api/setup', { setupToken: random(), email: 'owner@example.test', password })).status, 403);
+  const created = await f.provider.request('/api/setup', { setupToken, email: 'owner@example.test', password });
+  assert.equal(created.status, 201);
+  const session = await f.provider.request('/api/session');
+  assert.notEqual(session.data.csrf, initial.csrf);
+  assert.equal(session.data.setupRequired, false);
+  assert.equal(session.data.account.role, 'provider');
+  assert.equal((await f.provider.request('/api/setup', { setupToken, email: 'other@example.test', password })).status, 409);
+  assert.equal((await f.provider.request('/api/provider/customer', { tenantId: 'summit', email: 'customer@example.test', password })).status, 201);
+  const customer = f.client(); await customer.request('/api/session');
+  assert.equal((await customer.request('/api/login', { email: 'customer@example.test', password })).status, 200);
+  await customer.request('/api/session');
+  assert.equal((await customer.request('/api/provider/settings', {})).status, 403);
+  assert.equal((await customer.request('/api/state')).data.providerSetup, undefined);
+});
+
+test('provider credentials are encrypted, write-only, validated, and cannot change under a connected customer', async t => {
+  const f = await fixture(t, 'demo', undefined, { managedConfiguration: true });
+  const secret = random();
+  const body = { SERVICE_APP_ID: 'replacement-app', SERVICE_APP_CLIENT_ID: 'replacement-client', SERVICE_APP_CLIENT_SECRET: secret };
+  assert.equal((await f.summit.request('/api/provider/settings', body)).status, 403);
+  assert.equal((await f.provider.request('/api/provider/settings', { ...body, BASE_URL: 'https://evil.example' })).status, 400);
+  assert.equal((await f.provider.request('/api/provider/settings', body)).status, 200);
+  const sealed = f.store.setting('provider_configuration');
+  assert.ok(!sealed.includes(secret));
+  assert.equal(vault(f.config.ENCRYPTION_KEY).open(sealed, 'provider-configuration').SERVICE_APP_CLIENT_SECRET, secret);
+  assert.ok(!JSON.stringify((await f.provider.request('/api/state')).data).includes(secret));
+  assert.equal((await f.provider.request('/api/provider/settings', { SERVICE_APP_CLIENT_SECRET: '' })).status, 200);
+  assert.equal(f.config.SERVICE_APP_CLIENT_SECRET, secret);
+  await approve(f); await connect(f.summit);
+  assert.equal((await f.provider.request('/api/provider/settings', { SERVICE_APP_CLIENT_SECRET: random() })).status, 409);
+  assert.equal(f.config.SERVICE_APP_CLIENT_SECRET, secret);
+});
+
+test('the first provider OAuth pins the developer; stale callbacks and later identities cannot replace it', async t => {
+  let person = 'first-developer';
+  const fake = {
+    exchange: async () => ({ access_token: random(), refresh_token: random(), expires_in: 3600, obtained_at: Date.now() }),
+    identity: async () => ({ personId: person, orgId: 'developer-org', name: 'Developer' }),
+  };
+  const f = await fixture(t, 'live', fake, { managedConfiguration: true, config: { PROVIDER_WEBEX_PERSON_ID: '' } });
+  async function begin() {
+    const started = await f.provider.request('/api/oauth/provider', {});
+    assert.equal(started.status, 200);
+    return `/oauth/provider/callback?state=${new URL(started.data.url).searchParams.get('state')}&code=test-code`;
+  }
+  assert.equal((await f.provider.request(await begin())).status, 303);
+  assert.equal(f.config.PROVIDER_WEBEX_PERSON_ID, 'first-developer');
+  person = 'different-developer';
+  assert.equal((await f.provider.request(await begin())).status, 403);
+  assert.equal(f.config.PROVIDER_WEBEX_PERSON_ID, 'first-developer');
+  const stale = await begin();
+  assert.equal((await f.provider.request('/api/provider/settings', { PROVIDER_INTEGRATION_CLIENT_SECRET: random() })).status, 200);
+  assert.equal((await f.provider.request(stale)).status, 403);
+  assert.equal(f.store.setting('provider_tokens'), undefined);
+  const restoredConfig = { MODE: 'live', BASE_URL: f.config.BASE_URL, ENCRYPTION_KEY: f.config.ENCRYPTION_KEY };
+  const restored = createApp(restoredConfig, f.store, { managedConfiguration: true });
+  assert.equal(restoredConfig.SERVICE_APP_CLIENT_SECRET, f.config.SERVICE_APP_CLIENT_SECRET);
+  assert.equal(restoredConfig.PROVIDER_INTEGRATION_CLIENT_SECRET, f.config.PROVIDER_INTEGRATION_CLIENT_SECRET);
+  restored.close();
+});
+
+test('providers can save a Service App, an Integration, both, or neither without inventing missing credentials', async t => {
+  const blank = Object.fromEntries(['SERVICE_APP_ID', 'SERVICE_APP_CLIENT_ID', 'SERVICE_APP_CLIENT_SECRET',
+    'PROVIDER_INTEGRATION_CLIENT_ID', 'PROVIDER_INTEGRATION_CLIENT_SECRET', 'CUSTOMER_INTEGRATION_CLIENT_ID',
+    'CUSTOMER_INTEGRATION_CLIENT_SECRET', 'PROVIDER_WEBEX_PERSON_ID', 'WEBHOOK_SECRET'].map(key => [key, '']));
+  const service = { SERVICE_APP_ID: 'existing-app', SERVICE_APP_CLIENT_ID: 'service-client', SERVICE_APP_CLIENT_SECRET: random() };
+  const integration = { PROVIDER_INTEGRATION_CLIENT_ID: 'provider-client', PROVIDER_INTEGRATION_CLIENT_SECRET: random() };
+  for (const body of [{}, service, integration, { ...service, ...integration }]) {
+    const f = await fixture(t, 'live', undefined, { managedConfiguration: true, config: blank });
+    assert.equal((await f.provider.request('/api/provider/settings', body)).status, 200);
+    const state = (await f.provider.request('/api/state')).data;
+    assert.equal(state.configuration.serviceApp, !!body.SERVICE_APP_ID);
+    assert.equal(state.configuration.providerOAuth, !!body.PROVIDER_INTEGRATION_CLIENT_ID);
+    assert.equal(state.configuration.customerOAuth, false);
+    const before = f.store.setting('provider_configuration');
+    assert.equal((await f.provider.request('/api/provider/settings', { SERVICE_APP_ID: 'incomplete' })).status, 400);
+    assert.equal(f.store.setting('provider_configuration'), before);
+  }
+});
+
+test('registration changes during an OAuth exchange cannot store the old token or developer identity', async t => {
+  let release, started;
+  const waiting = new Promise(resolve => { release = resolve; });
+  const exchanging = new Promise(resolve => { started = resolve; });
+  const f = await fixture(t, 'live', {
+    exchange: async () => { started(); await waiting; return { access_token: random(), refresh_token: random(), expires_in: 3600 }; },
+    identity: async () => ({ personId: 'old-developer', orgId: 'developer-org', name: 'Developer' }),
+  }, { managedConfiguration: true, config: { PROVIDER_WEBEX_PERSON_ID: '' } });
+  const start = await f.provider.request('/api/oauth/provider', {});
+  const state = new URL(start.data.url).searchParams.get('state');
+  const callback = f.provider.request(`/oauth/provider/callback?state=${state}&code=test-code`);
+  await exchanging;
+  try {
+    assert.equal((await f.provider.request('/api/provider/settings', { PROVIDER_INTEGRATION_CLIENT_SECRET: random() })).status, 200);
+  } finally { release(); }
+  assert.equal((await callback).status, 409);
+  assert.equal(f.store.setting('provider_tokens'), undefined);
+  assert.equal(f.config.PROVIDER_WEBEX_PERSON_ID, '');
 });

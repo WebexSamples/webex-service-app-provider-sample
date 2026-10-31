@@ -1,48 +1,38 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, copyFileSync, readFileSync, statSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, statSync, rmSync, writeFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawn } from 'node:child_process';
-import { parseEnv } from 'node:util';
-import { fileURLToPath } from 'node:url';
-import { random, verifyPassword } from '../lib/security.mjs';
-import { openStore } from '../lib/store.mjs';
+import { localKey } from '../lib/config.mjs';
+import { randomBytes } from 'node:crypto';
+import { vault } from '../lib/security.mjs';
 
-function setup(directory, password) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [fileURLToPath(new URL('../scripts/setup.mjs', import.meta.url))], {
-      cwd: directory, env: { PATH: process.env.PATH, HOME: process.env.HOME }, stdio: ['pipe', 'pipe', 'pipe'],
-    });
-    const prompts = ['Mode: demo or live', 'Provider administrator password', 'Summit administrator password', 'Northstar administrator password'];
-    const answers = ['demo', password, password, password];
-    let output = '', prompt = 0;
-    const timer = setTimeout(() => { child.kill(); reject(new Error('Setup timed out.')); }, 15000);
-    child.stdout.on('data', chunk => {
-      output += chunk.toString();
-      if (prompt < prompts.length && output.includes(prompts[prompt])) child.stdin.write(`${answers[prompt++]}\n`);
-    });
-    child.stderr.resume();
-    child.on('error', reject);
-    child.on('close', status => { clearTimeout(timer); resolve({ status, output }); });
-  });
-}
-test('interactive bootstrap creates usable accounts, protects secrets, and refuses account overwrite', async t => {
-  const directory = mkdtempSync(join(tmpdir(), 'service-app-setup-'));
+test('local setup generates a private persistent key without environment configuration', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'service-app-key-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  copyFileSync(new URL('../.env.example', import.meta.url), join(directory, '.env.example'));
-  const password = random();
-  const result = await setup(directory, password);
-  assert.equal(result.status, 0); assert.ok(!result.output.includes(password));
-  const environment = parseEnv(readFileSync(join(directory, '.env'), 'utf8'));
-  assert.equal(environment.MODE, 'demo');
-  assert.equal(Buffer.from(environment.ENCRYPTION_KEY, 'base64').length, 32);
-  assert.equal(statSync(join(directory, '.env')).mode & 0o777, 0o600);
-  const store = openStore(join(directory, '.data/demo.sqlite'));
-  assert.equal(store.all('SELECT id FROM accounts').length, 3);
-  assert.equal(verifyPassword(password, store.get('SELECT password_hash FROM accounts LIMIT 1').password_hash), true);
-  store.close();
-  const repeated = await setup(directory, random());
-  assert.equal(repeated.status, 1);
-  assert.equal(parseEnv(readFileSync(join(directory, '.env'), 'utf8')).ENCRYPTION_KEY, environment.ENCRYPTION_KEY);
+  const key = localKey(directory);
+  assert.equal(Buffer.from(key, 'base64').length, 32);
+  assert.equal(localKey(directory), key);
+  assert.equal(statSync(directory).mode & 0o777, 0o700);
+  assert.equal(statSync(join(directory, 'master.key')).mode & 0o777, 0o600);
+  const sealed = vault(key).seal({ secret: 'example-test-credential' }, 'provider-configuration');
+  assert.equal(vault(localKey(directory)).open(sealed, 'provider-configuration').secret, 'example-test-credential');
+  writeFileSync(join(directory, 'master.key'), 'damaged');
+  assert.throws(() => localKey(directory), /invalid/);
+  rmSync(join(directory, 'master.key'));
+  writeFileSync(join(directory, 'live.sqlite'), 'existing encrypted database');
+  assert.throws(() => localKey(directory), /key is missing/);
+});
+test('migration preserves the existing encryption key and rejects conflicting keys or symlinks', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'service-app-migrate-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const key = randomBytes(32).toString('base64');
+  assert.equal(localKey(directory, key), key);
+  assert.equal(readFileSync(join(directory, 'master.key'), 'utf8'), key);
+  assert.throws(() => localKey(directory, randomBytes(32).toString('base64')), /differs/);
+  const target = join(directory, 'linked');
+  symlinkSync(join(directory, 'master.key'), target);
+  rmSync(join(directory, 'master.key'));
+  symlinkSync(target, join(directory, 'master.key'));
+  assert.throws(() => localKey(directory));
 });

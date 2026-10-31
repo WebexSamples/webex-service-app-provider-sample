@@ -9,15 +9,15 @@ Implemented protections:
 - Fixed Webex API origin, HTTPS certificate validation, bounded request bodies and outbound timeouts, rejected redirects, and checked pagination targets. No caller-controlled API base URL.
 - Webex person/organization identity from `/people/me`, checked Full Administrator authority, session-bound one-use OAuth state, five-minute pending identity proofs, and explicit confirmation before token retrieval.
 - Unique canonical organization claims, connection revisions, and in-process guards against concurrent linking. A single process is required; do not scale this session/locking model across workers.
-- Salted scrypt password hashes and generated AES-256-GCM keys. Credential ciphertext is bound to a tenant via authenticated additional data. Tokens and client secrets are never returned to the UI, logged, or stored in browser storage.
+- Salted scrypt password hashes and generated AES-256-GCM keys. Credential ciphertext is bound to a tenant via authenticated additional data. Saved tokens and client secrets are never returned to the UI, logged, or stored in browser storage. Provider credential forms send newly entered values to the server once, then clear them.
 - Customer OAuth tokens discarded after verification; provider and Service App token pairs encrypted separately and refreshed using their own client credentials.
 - Signed optional deauthorization callbacks recheck current access rather than inferring event ordering from envelope metadata. Confirmed API access denial disables access and removes credentials.
 - Strict same-origin Content Security Policy, no inline or CDN scripts, locked Momentum browser assets served through an explicit route allow-list, safe text-based DOM rendering, no secret material in static files, and no caching of app/API responses.
 
 Known boundaries:
 
-- `.env` is local secret storage, with mode 0600 on setup; it is not a managed vault. Move secrets into a managed vault, plan key rotation/backups, and restrict operating-system access before hosting real customer data.
-- Account creation is operator-controlled bootstrap. Invitations, password reset, MFA, account lifecycle, delegated connection authority, persistent/distributed sessions, and a production reverse-proxy trust model are outside this sample.
+- Registration credentials are encrypted in SQLite; `.data/master.key` is a `0600` local key file in a `0700` directory. An attacker running as the same OS user can read that key and decrypt the database. This is local protection, not a managed vault. Legacy `.env` files remain untouched for migration; remove their plaintext copy after verifying migration and backing up the key. Move secrets into a managed vault, plan key rotation/backups, and restrict operating-system access before hosting real customer data.
+- The first provider account requires a one-use setup code printed only in the server terminal, plus session/Origin/CSRF checks. The code is removed from browser history after loading. Account creation then requires a provider session. Invitations, password reset, MFA, account lifecycle, delegated connection authority, persistent/distributed sessions, and a production reverse-proxy trust model are outside this sample.
 - Webex Full Admin verification is intentionally strict and fails closed. It requires live validation of role visibility under the configured customer Integration scopes.
 - Directory data is read-only and not stored in SQLite, but authorized customer browsers receive names/emails. Do not capture real customer data in shared screenshots or logs.
 - A directory read can fail due to revoked consent, missing scope, or invalid credentials. HTTP 401/403 disables the connection conservatively; an operator must resolve the cause and reconnect.

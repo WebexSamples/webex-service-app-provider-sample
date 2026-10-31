@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import secrets
+import socket
 import subprocess
 import tempfile
 
@@ -10,6 +11,79 @@ from playwright.sync_api import sync_playwright, expect
 
 ROOT = Path(__file__).resolve().parent.parent
 ARTIFACTS = ROOT / "artifacts"
+
+
+def first_run_smoke(browser):
+    with tempfile.TemporaryDirectory(prefix="service-app-first-run-") as directory:
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            port = listener.getsockname()[1]
+        command = ["node", "server.mjs", "--port", str(port), "--data-dir", directory]
+        environment = {"PATH": os.environ["PATH"]}
+        password, client_secret = secrets.token_urlsafe(24), secrets.token_urlsafe(24)
+        server = None
+        context = browser.new_context(viewport={"width": 1440, "height": 1100})
+        try:
+            server = subprocess.Popen(command, cwd=ROOT, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            assert "live mode" in server.stdout.readline(), "No-environment server did not start"
+            private_link = server.stdout.readline().strip().split(": ", 1)[1]
+            page = context.new_page()
+            page.goto(private_link)
+            expect(page.get_by_role("heading", name="Set up your provider account")).to_be_visible()
+            assert "#setup=" not in page.url, "Setup code remained in browser history"
+            page.get_by_label("Email address", exact=True).fill("owner@example.test")
+            page.get_by_label("Password", exact=True).fill(password)
+            page.get_by_role("button", name="Create provider account", exact=True).click()
+            expect(page.get_by_role("heading", name="Webex registrations", exact=True)).to_be_visible()
+            for choice in ["Service App only", "Integration only", "Service App and Integration", "Neither yet"]:
+                page.get_by_role("radio", name=choice, exact=True).check()
+                expect(page.get_by_role("radio", name=choice, exact=True)).to_be_checked()
+            for width in [320, 390]:
+                page.set_viewport_size({"width": width, "height": 844})
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "Provider setup overflows on mobile"
+            page.screenshot(path=str(ARTIFACTS / "provider-setup-mobile.png"), full_page=True)
+            page.set_viewport_size({"width": 1440, "height": 1100})
+            page.screenshot(path=str(ARTIFACTS / "provider-setup.png"))
+            for label, value in [
+                ("Service App ID", "sample-service-app"), ("Service App client ID", "sample-service-client"),
+                ("Service App client secret", client_secret), ("Provider Integration client ID", "sample-provider-client"),
+                ("Provider Integration client secret", client_secret), ("Customer Integration client ID", "sample-customer-client"),
+                ("Customer Integration client secret", client_secret),
+            ]:
+                page.get_by_label(label, exact=True).fill(value)
+            page.get_by_role("button", name="Save available registrations", exact=True).click()
+            expect(page.get_by_role("status")).to_contain_text("saved securely")
+            page.get_by_label("Customer email address", exact=True).fill("customer@example.test")
+            page.get_by_label("Customer password", exact=True).fill(password)
+            page.get_by_role("button", name="Create customer sign-in", exact=True).click()
+            expect(page.get_by_role("status")).to_contain_text("Customer sign-in created")
+            assert client_secret.encode() not in Path(directory, "live.sqlite").read_bytes(), "Registration secret stored in plaintext"
+            assert Path(directory, "master.key").stat().st_mode & 0o777 == 0o600
+            context.close()
+            server.terminate()
+            server.wait(timeout=10)
+            server = subprocess.Popen(command, cwd=ROOT, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            assert "live mode" in server.stdout.readline(), "Saved configuration did not restart"
+            context = browser.new_context(viewport={"width": 1440, "height": 1100})
+            page = context.new_page()
+            page.goto(f"http://localhost:{port}")
+            expect(page.get_by_role("heading", name="Welcome back", exact=True)).to_be_visible()
+            page.get_by_label("Email address", exact=True).fill("owner@example.test")
+            page.get_by_label("Password", exact=True).fill(password)
+            page.get_by_label("Password", exact=True).press("Enter")
+            page.get_by_role("button", name="Edit registration details", exact=True).click()
+            expect(page.get_by_label("Service App ID", exact=True)).to_have_value("sample-service-app")
+            expect(page.get_by_label("Service App client secret", exact=True)).to_have_value("")
+            expect(page.get_by_label("Service App client secret", exact=True)).to_have_attribute("placeholder", "Saved · leave blank to keep")
+        finally:
+            context.close()
+            if server:
+                server.terminate()
+                try:
+                    server.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    server.kill()
+                    server.wait(timeout=5)
 
 
 def main():
@@ -32,6 +106,7 @@ def main():
                 raise RuntimeError("The isolated browser fixture did not start.")
             with sync_playwright() as playwright:
                 browser = playwright.chromium.launch(headless=True)
+                first_run_smoke(browser)
                 errors = []
                 external_requests = []
 
@@ -129,7 +204,7 @@ def main():
                 for context in [provider_context, customer_context, other_context]:
                     context.close()
                 browser.close()
-            print("Browser smoke passed: Momentum hydration, local fonts/assets, keyboard/form behavior, separate roles, member denial, explicit linking, pagination, claim conflict, deauthorization, and 320/390px layouts.")
+            print("Browser smoke passed: no-env first launch, setup choices, encrypted credentials across restart, customer account creation, Momentum assets, keyboard controls, role isolation, explicit linking, pagination, claim conflict, deauthorization, and 320/390px layouts.")
             print("Fixture-only screenshots: artifacts/")
         finally:
             server.terminate()
