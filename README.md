@@ -55,6 +55,8 @@ Demo and live mode have separate databases and accounts. Complete the same prote
 
 The permanent **DEMO MODE** banner identifies fixture data. Demo mode makes no Webex requests, and demo mutation endpoints are disabled in live mode. The fixture authority selector is intentionally a simulation, not an authentication mechanism.
 
+To unlink a customer, expand **Disconnect organization**, review the effect, and select **Confirm disconnect**. Opening the disclosure leaves the connection active. Control Hub authorization is managed separately.
+
 ## Use real Webex apps
 
 Follow [live setup](docs/LIVE_SETUP.md). It describes the Service App, the two separate OAuth Integration registrations, scopes, callback URLs, and optional signed lifecycle webhooks.

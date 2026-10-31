@@ -189,6 +189,15 @@ def main():
 
                 check_mobile(customer, "customer")
 
+                customer.get_by_text("Disconnect organization", exact=True).click()
+                expect(customer.get_by_role("heading", name="Disconnect this organization?", exact=True)).to_be_visible()
+                expect(customer.get_by_role("heading", name="Organization directory", exact=True)).to_be_visible()
+                customer.get_by_role("button", name="Confirm disconnect", exact=True).click()
+                expect(customer.get_by_role("heading", name="Organization directory", exact=True)).to_have_count(0)
+                customer.get_by_role("button", name="Verify fixture identity", exact=True).click()
+                customer.get_by_role("button", name="Confirm link and activate Service App", exact=True).click()
+                expect(customer.get_by_role("heading", name="Organization directory", exact=True)).to_be_visible()
+
                 provider.get_by_role("button", name="Deauthorize Summit Outfitters Webex", exact=True).click()
                 customer.get_by_role("button", name="Refresh status", exact=True).click()
                 expect(customer.get_by_text("Disconnected", exact=True)).to_be_visible()
@@ -204,7 +213,7 @@ def main():
                 for context in [provider_context, customer_context, other_context]:
                     context.close()
                 browser.close()
-            print("Browser smoke passed: no-env first launch, setup choices, encrypted credentials across restart, customer account creation, Momentum assets, keyboard controls, role isolation, explicit linking, pagination, claim conflict, deauthorization, and 320/390px layouts.")
+            print("Browser smoke passed: no-env first launch, setup choices, encrypted credentials across restart, customer accounts, Momentum assets, keyboard controls, role isolation, explicit linking, pagination, claim conflict, inline disconnect/reconnect, deauthorization, and 320/390px layouts.")
             print("Fixture-only screenshots: artifacts/")
         finally:
             server.terminate()

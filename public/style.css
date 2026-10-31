@@ -95,9 +95,11 @@ footer { padding-top: 8px; }
 .demo-form label[for=authority] { grid-column: 2; grid-row: 2; }
 .demo-form #authority { grid-column: 2; grid-row: 3; }
 .demo-form .button { justify-self: start; margin-top: 24px; grid-column: 1/-1; }
-.disconnect-row { display: flex; align-items: center; gap: 24px; margin: 28px 0; }
-.disconnect-row p { max-width: 650px; margin: 0; }
-.disconnect-row .button { flex-shrink: 0; }
+.disconnect-confirmation { margin: 28px 0; }
+.disconnect-confirmation summary { width: fit-content; padding: 10px 16px; border: 1px solid var(--blue); border-radius: 4px; color: var(--blue); cursor: pointer; font-size: .875rem; }
+.disconnect-confirmation summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 4px; }
+.disconnect-review { margin-top: 16px; padding: 24px; background: var(--white); border: 1px solid var(--line); border-radius: 6px; }
+.disconnect-review p { max-width: 650px; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .075em; color: var(--blue); margin-bottom: 12px; }
 .muted { color: var(--muted); }
@@ -169,7 +171,7 @@ button.button:disabled { opacity: .55; cursor: wait; }
   .page-heading { align-items: flex-start; flex-direction: column; gap: 18px; margin: 24px 0; }
   .panel, .connection-hero, .confirm-panel { padding: 22px; }
   .org-grid { grid-template-columns: 1fr; }
-  .section-heading, .disconnect-row { align-items: flex-start; flex-direction: column; }
+  .section-heading { align-items: flex-start; flex-direction: column; }
   .connection-hero { flex-direction: column; gap: 12px; }
   .events li { flex-direction: column; gap: 6px; }
   .demo-form { display: flex; flex-direction: column; align-items: stretch; }

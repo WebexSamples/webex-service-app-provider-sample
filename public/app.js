@@ -226,11 +226,13 @@ function customer() {
       el('tbody', {}, people.map(person => el('tr', {}, el('td', {}, person.name), el('td', {}, person.email))))))
       : text('p', 'empty', 'Select Refresh directory to read this organization’s members.'),
     hasMore ? button('Load more members', () => loadDirectory(true), true) : null) : null;
-  const disconnect = t.orgId ? el('section', { class: 'disconnect-row' }, text('p', 'fine', 'Disconnect removes stored credentials and releases this provider-account link. It does not revoke the Service App in Control Hub.'),
-    button('Disconnect organization', async () => {
-      if (!window.confirm('Disconnect this organization and delete its locally stored Service App credentials?')) return;
-      await api('/api/disconnect', { confirm: true }); people = []; notice = 'Disconnected. Revoke authorization separately in Control Hub if needed.';
-    }, true)) : null;
+  const disconnect = t.orgId ? el('details', { class: 'disconnect-confirmation' },
+    el('summary', {}, 'Disconnect organization'),
+    el('div', { class: 'disconnect-review' }, text('h2', '', 'Disconnect this organization?'),
+      text('p', 'fine', 'This removes stored Service App credentials and releases this account link. It does not revoke the Service App in Control Hub. Reconnecting requires Webex verification and confirmation again.'),
+      button('Confirm disconnect', async () => {
+        await api('/api/disconnect', { confirm: true }); people = []; notice = 'Disconnected. Revoke authorization separately in Control Hub if needed.';
+      }, true))) : null;
   return [summary, directory, ...(t.status === 'Connected' ? [] : [guide, el('section', { class: 'panel' }, verification), confirmation]), disconnect, auditPanel()];
 }
 async function loadDirectory(more) {

@@ -30,6 +30,24 @@ The Chromium smoke launched the real server with only `PATH` in its environment,
 
 For the existing local sandbox installation, migration read-back verified that the generated private key file retained the original encryption key, imported registration fields matched the legacy configuration, and existing encrypted provider/Service App token records remained readable. No credential values or customer data were captured. This was a local storage migration check, not a new live Webex API or authorization test.
 
+## Live provider setup and admin approval — October 31, 2026
+
+Using a Chrome profile already signed into the sandbox administrator account, the run reused the three existing Service App Studio registrations and their previously approved scopes. No additional registrations or webhook subscriptions were needed. The server ran with its environment cleared except for `PATH`, using the generated key file and encrypted registration settings.
+
+Provider sign-in showed all registrations configured. All saved-secret fields were empty with saved-value placeholders; submitting them blank preserved the credentials and existing connection. Provider OAuth completed with the already signed-in Webex developer account. The provider console showed connection metadata and no customer directory.
+
+The customer read the 10-member directory with the migrated machine credentials. Local disconnect removed the stored credentials and organization claim. Customer OAuth through the separate Integration verified the assigned Full Administrator role; before confirmation, database read-back showed no machine credentials or claim. Explicit confirmation retrieved a fresh token pair and directory access returned 10 members. Northstar verified the same administrator but was denied Summit's organization claim and saved no credentials or claim. A server restart without environment configuration required local sign-in again; directory access still returned 10 members without repeating customer OAuth.
+
+The native browser disconnect popup proved awkward to automate in a background tab. It was replaced with an inline disclosure and separate **Confirm disconnect** action. Opening the disclosure retained the connection; the confirmation removed it. The updated control passed the fixture walkthrough and the live sandbox disconnect/reconnect path. JavaScript checks and all 23 automated tests passed.
+
+### Administrator approval cycle
+
+The administrator opened **Apps → Service Apps → Other service apps**, searched by the exact application ID, and selected **Service App Studio Sandbox Directory**. Control Hub listed its existing scopes as `spark-admin:people_read`, `spark-admin:organizations_read`, and `spark:kms`.
+
+After local disconnect, authorization was temporarily removed from this dedicated sample app and saved in Control Hub. A fresh customer verification succeeded, but token retrieval failed with Webex HTTP 401 and no directory was available. The administrator then authorized the same app and saved the change; the persisted Control Hub row showed **Authorized**. Refreshing the sample still showed no directory, and database read-back confirmed that approval alone had created neither credentials nor an organization claim. Fresh customer verification and explicit confirmation then activated the connection and read all 10 members.
+
+The app was left authorized in Control Hub with Summit connected and Northstar unlinked. Private evidence captures the Control Hub approval state and the directory header/member count, excluding customer member rows, credentials, and authorization codes. No external Webex organizations, App Hub publication, live webhook delivery, revocation propagation timing, or natural token expiry were tested in this run.
+
 ## Live sandbox run — October 26, 2026
 
 The run used a controlled developer organization and three dedicated registrations: **Service App Studio Sandbox Directory**, **Service App Studio Provider Sandbox**, and **Service App Studio Customer Sandbox**. The same Webex Full Administrator served as the app creator and customer verifier for this pre-App Hub test. Provider, Summit, and Northstar were separate local sample accounts, exercised sequentially in one browser profile. No external customer organization was involved.
