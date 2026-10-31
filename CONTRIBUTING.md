@@ -1,6 +1,6 @@
 # Contributing
 
-Use Node 24.13+ in the 24.x line. No application dependencies need installing.
+Use Node 24.13+ in the 24.x line and install the locked browser dependencies with `npm ci --ignore-scripts`.
 
 1. Create a focused branch.
 2. Run `npm run check` and `npm test`.

@@ -16,6 +16,12 @@ Covered behaviors include:
 - Signed lifecycle events, correct customer organization field, current-access rechecks for delayed events, and no activation on authorization notifications.
 - API errors do not expose raw upstream bodies, tokens, or client secrets.
 
+### Momentum UI refresh — October 31, 2026
+
+On Node.js 24.19.0, a clean `npm ci --ignore-scripts`, JavaScript syntax checks, all 17 automated tests, and the Chromium browser smoke passed. The dependency audit reported zero vulnerabilities. The UI uses locked Momentum components, light-theme tokens, and a locally served font; asset tests confirm only the explicit asset routes are served and the same-origin Content Security Policy is retained.
+
+Browser coverage includes component hydration, font loading, no external asset requests, native login validation and Enter submission, and Momentum button activation with Enter and Space. Login, provider, customer confirmation, and connected-directory views fit at 320px and 390px. Desktop/mobile fixture screenshots were inspected and the README screenshots refreshed. The full fixture walkthrough still covers member denial, explicit linking, pagination, conflicting claims, and deauthorization. No new live Webex authorization or API test was performed for this styling change.
+
 ## Live sandbox run — October 26, 2026
 
 The run used a controlled developer organization and three dedicated registrations: **Service App Studio Sandbox Directory**, **Service App Studio Provider Sandbox**, and **Service App Studio Customer Sandbox**. The same Webex Full Administrator served as the app creator and customer verifier for this pre-App Hub test. Provider, Summit, and Northstar were separate local sample accounts, exercised sequentially in one browser profile. No external customer organization was involved.

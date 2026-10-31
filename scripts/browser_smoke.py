@@ -33,31 +33,52 @@ def main():
             with sync_playwright() as playwright:
                 browser = playwright.chromium.launch(headless=True)
                 errors = []
+                external_requests = []
+
+                def observe(page):
+                    page.on("pageerror", lambda error: errors.append(str(error)))
+                    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+                    page.on("request", lambda request: external_requests.append(request.url) if not request.url.startswith(base_url + "/") else None)
+
+                def check_mobile(page, name):
+                    for width in [320, 390]:
+                        page.set_viewport_size({"width": width, "height": 844})
+                        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"), f"{name} overflows at {width}px"
+                    page.evaluate("window.scrollTo(0, 0)")
+                    page.screenshot(path=str(ARTIFACTS / f"{name}-mobile.png"), full_page=True)
+                    page.set_viewport_size({"width": 1440, "height": 1100})
 
                 def login(email):
                     context = browser.new_context(viewport={"width": 1440, "height": 1100})
                     page = context.new_page()
-                    page.on("pageerror", lambda error: errors.append(str(error)))
+                    observe(page)
                     page.goto(base_url)
                     page.wait_for_load_state("networkidle")
                     page.get_by_label("Email address").fill(email)
                     page.get_by_label("Password", exact=True).fill(password)
-                    page.get_by_role("button", name="Sign in →", exact=True).click()
+                    page.get_by_label("Password", exact=True).press("Enter")
                     expect(page.get_by_role("button", name="Sign out", exact=True)).to_be_visible()
                     return context, page
 
                 # Inspect the rendered login page before operating the authenticated views.
                 landing = browser.new_page(viewport={"width": 1440, "height": 1000})
+                observe(landing)
                 landing.goto(base_url)
                 landing.wait_for_load_state("networkidle")
                 expect(landing.get_by_role("heading", name="Welcome back")).to_be_visible()
                 landing.screenshot(path=str(ARTIFACTS / "login.png"), full_page=True)
+                check_mobile(landing, "login")
+                landing.get_by_role("button", name="Sign in →", exact=True).click()
+                assert landing.get_by_label("Email address").evaluate("input => !input.validity.valid"), "Native form validation missing"
                 landing.close()
 
                 provider_context, provider = login("provider@example.test")
-                provider.get_by_role("button", name="Connect demo Integration", exact=True).click()
+                assert provider.evaluate("customElements.get('mdc-button') && document.querySelector('mdc-button').shadowRoot"), "Momentum buttons did not hydrate"
+                provider.evaluate("document.fonts.ready")
+                assert provider.evaluate("document.fonts.check('15px Momentum')"), "Local Momentum font did not load"
+                provider.get_by_role("button", name="Connect demo Integration", exact=True).press("Enter")
                 expect(provider.get_by_text("Demo provider Integration connected.", exact=True)).to_be_visible()
-                provider.get_by_role("button", name="Authorize Summit Outfitters Webex", exact=True).click()
+                provider.get_by_role("button", name="Authorize Summit Outfitters Webex", exact=True).press("Space")
                 expect(provider.get_by_role("button", name="Deauthorize Summit Outfitters Webex", exact=True)).to_be_visible()
 
                 customer_context, customer = login("summit@example.test")
@@ -68,6 +89,7 @@ def main():
                 customer.get_by_label("Fixture authority").select_option("admin")
                 customer.get_by_role("button", name="Verify fixture identity", exact=True).click()
                 expect(customer.get_by_role("heading", name="Confirm this organization link")).to_be_visible()
+                check_mobile(customer, "customer-confirmation")
                 customer.get_by_role("button", name="Confirm link and activate Service App", exact=True).click()
                 expect(customer.get_by_role("heading", name="Organization directory", exact=True)).to_be_visible()
                 customer.get_by_role("button", name="Refresh directory", exact=True).click()
@@ -88,21 +110,26 @@ def main():
                 expect(provider.locator("tbody tr").filter(has_text="Summit Outfitters").get_by_text("Connected", exact=True)).to_be_visible()
                 provider.evaluate("window.scrollTo(0, 0)")
                 provider.screenshot(path=str(ARTIFACTS / "provider-console.png"))
+                check_mobile(provider, "provider")
 
-                customer.set_viewport_size({"width": 390, "height": 844})
-                customer.evaluate("window.scrollTo(0, 0)")
-                customer.screenshot(path=str(ARTIFACTS / "customer-mobile.png"), full_page=True)
-                assert customer.evaluate("document.documentElement.scrollWidth <= window.innerWidth"), "Mobile page overflows horizontally"
+                check_mobile(customer, "customer")
 
                 provider.get_by_role("button", name="Deauthorize Summit Outfitters Webex", exact=True).click()
                 customer.get_by_role("button", name="Refresh status", exact=True).click()
                 expect(customer.get_by_text("Disconnected", exact=True)).to_be_visible()
                 expect(customer.get_by_role("heading", name="Organization directory", exact=True)).to_have_count(0)
-                assert not errors, "Browser JavaScript errors occurred"
+                # Chromium logs the member denial and duplicate-claim denial exercised above.
+                expected_denials = {
+                    "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+                    "Failed to load resource: the server responded with a status of 409 (Conflict)",
+                }
+                unexpected_errors = [error for error in errors if error not in expected_denials]
+                assert not unexpected_errors, f"Browser errors occurred: {unexpected_errors}"
+                assert not external_requests, "The UI made requests outside its own origin"
                 for context in [provider_context, customer_context, other_context]:
                     context.close()
                 browser.close()
-            print("Browser smoke passed: separate roles, member denial, explicit linking, pagination, claim conflict, deauthorization, and mobile layout.")
+            print("Browser smoke passed: Momentum hydration, local fonts/assets, keyboard/form behavior, separate roles, member denial, explicit linking, pagination, claim conflict, deauthorization, and 320/390px layouts.")
             print("Fixture-only screenshots: artifacts/")
         finally:
             server.terminate()

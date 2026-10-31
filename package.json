@@ -5,11 +5,18 @@
   "type": "module",
   "description": "Customer-initiated Webex Service App organization linking and directory sample",
   "license": "MIT",
-  "engines": { "node": ">=24.13.0 <25" },
+  "engines": {
+    "node": ">=24.13.0 <25"
+  },
   "scripts": {
     "setup": "node scripts/setup.mjs",
     "start": "node --env-file-if-exists=.env server.mjs",
     "test": "node --test",
     "check": "node scripts/check.mjs"
+  },
+  "dependencies": {
+    "@momentum-design/components": "0.137.2",
+    "@momentum-design/fonts": "0.2.6",
+    "@momentum-design/tokens": "0.11.0"
   }
 }

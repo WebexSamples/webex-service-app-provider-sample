@@ -53,6 +53,20 @@ async function connect(client, orgId = 'demo-summit') {
   assert.equal((await client.request('/api/demo/verify', { orgId, authority: 'admin' })).status, 200);
   return client.request('/api/connect', { orgId, confirm: true });
 }
+test('Momentum assets are served locally without exposing package files or relaxing CSP', async t => {
+  const f = await fixture(t);
+  for (const [path, type] of [['/vendor/momentum.js', 'text/javascript'], ['/vendor/theme.css', 'text/css'],
+    ['/vendor/typography.css', 'text/css'], ['/vendor/fonts/css/fonts.css', 'text/css'], ['/vendor/fonts/inter/Inter.var.woff2', 'font/woff2']]) {
+    const response = await fetch(`${f.config.BASE_URL}${path}`);
+    assert.equal(response.status, 200);
+    assert.ok(response.headers.get('content-type').startsWith(type));
+    assert.match(response.headers.get('content-security-policy'), /script-src 'self'; style-src 'self';/);
+    assert.ok((await response.arrayBuffer()).byteLength > 100);
+  }
+  for (const path of ['/vendor/package.json', '/node_modules/@momentum-design/components/package.json', '/vendor/%2e%2e/.env']) {
+    assert.equal((await f.provider.request(path)).status, 404);
+  }
+});
 test('approval alone never links; confirmed machine access paginates and survives customer re-login', async t => {
   const f = await fixture(t); await approve(f);
   assert.equal(f.store.get("SELECT credentials FROM tenants WHERE id='summit'").credentials, null);

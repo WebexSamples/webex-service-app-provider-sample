@@ -12,7 +12,7 @@ Implemented protections:
 - Salted scrypt password hashes and generated AES-256-GCM keys. Credential ciphertext is bound to a tenant via authenticated additional data. Tokens and client secrets are never returned to the UI, logged, or stored in browser storage.
 - Customer OAuth tokens discarded after verification; provider and Service App token pairs encrypted separately and refreshed using their own client credentials.
 - Signed optional deauthorization callbacks recheck current access rather than inferring event ordering from envelope metadata. Confirmed API access denial disables access and removes credentials.
-- Strict Content Security Policy, no inline/third-party scripts, safe text-based DOM rendering, no secret material in static files, and no caching of app/API responses.
+- Strict same-origin Content Security Policy, no inline or CDN scripts, locked Momentum browser assets served through an explicit route allow-list, safe text-based DOM rendering, no secret material in static files, and no caching of app/API responses.
 
 Known boundaries:
 

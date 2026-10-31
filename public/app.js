@@ -12,7 +12,8 @@ function el(tag, props = {}, ...children) {
 }
 const text = (tag, className, value) => el(tag, { class: className }, value);
 const date = value => value ? new Date(value).toLocaleString() : 'Not yet';
-const button = (label, action, secondary = false) => el('button', { class: secondary ? 'button secondary' : 'button',
+const button = (label, action, secondary = false) => el('mdc-button', { class: secondary ? 'button secondary' : 'button',
+  variant: secondary ? 'secondary' : 'primary', color: 'accent', size: '40',
   type: 'button', disabled: busy, onClick: () => run(action) }, label);
 const pill = label => text('span', `pill ${label === 'Connected' ? 'connected' : ''}`, label);
 async function api(path, body) {
@@ -39,7 +40,12 @@ async function run(action) {
     try { await refresh(); } catch { /* Keep the original actionable error visible. */ }
   } finally { busy = false; render(); }
 }
-function brand() { return el('div', { class: 'brand' }, text('span', 'brand-symbol', '↗'), el('div', {}, 'Service App Studio', text('small', '', 'A Webex developer sample'))); }
+function portalHeader() {
+  return el('header', { class: 'portal-header' },
+    el('a', { class: 'brand', href: 'https://developer.webex.com', 'aria-label': 'Webex for Developers' },
+      text('span', 'brand-symbol', '</>'), el('span', {}, 'Webex', text('span', 'brand-subtitle', 'for Developers'))),
+    el('span', { class: 'header-context' }, 'Samples', text('span', '', 'Service App Studio')));
+}
 function banner() {
   return text('div', `mode-banner ${session.mode}`, session.mode === 'demo'
     ? 'DEMO MODE · Fixture identities and directory data. No Webex requests are made.'
@@ -56,12 +62,12 @@ function login() {
   el('label', { for: 'password' }, 'Password'), el('input', { id: 'password', name: 'password', type: 'password', autocomplete: 'current-password', required: true, maxlength: '256' }),
   el('button', { class: 'button', type: 'submit', disabled: busy }, busy ? 'Signing in…' : 'Sign in →'),
   text('p', 'fine', 'Local accounts are created with npm run setup. There are no default passwords.'));
-  return el('div', { class: 'login-shell' }, el('section', { class: 'intro' }, brand(),
-    text('p', 'eyebrow', 'CUSTOMER-INITIATED ORGANIZATION LINKING'), text('h1', '', 'A connection\nwith clear consent.'),
+  return el('div', {}, portalHeader(), el('div', { class: 'login-shell' }, el('section', { class: 'intro' },
+    text('p', 'eyebrow', 'SERVICE APP STUDIO'), text('h1', '', 'Connect your customers\nto Webex.'),
     text('p', 'intro-copy', 'Approve in Webex. Verify your identity. Choose the provider account. Only then activate the Service App.'),
     el('ol', { class: 'flow' }, ['Authorize the Service App', 'Verify the Webex administrator', 'Confirm the organization link'].map((s, i) => el('li', {}, text('span', '', `0${i + 1}`), s))),
-    text('p', 'intro-foot', 'Human verification → organization identity → machine access')),
-    el('main', { id: 'main', class: 'login-panel' }, banner(), message(), form));
+    text('p', 'intro-foot', 'A Webex Service App provider sample')),
+    el('main', { id: 'main', class: 'login-panel' }, banner(), message(), form)));
 }
 async function oauth(kind) {
   const result = await api(`/api/oauth/${kind}`, {});
@@ -151,10 +157,11 @@ function render() {
   if (!session) { root.replaceChildren(text('p', 'loading', 'Opening Service App Studio…')); return; }
   if (!session.account) { root.replaceChildren(login()); return; }
   const isProvider = session.account.role === 'provider';
-  root.replaceChildren(el('div', { class: 'app-shell' },
-    el('aside', { class: 'sidebar' }, brand(), text('p', 'eyebrow sidebar-label', isProvider ? 'PROVIDER EXPERIENCE' : 'CUSTOMER EXPERIENCE'),
-      text('div', 'nav-active', isProvider ? '↗  Customer connections' : '↗  Webex organization'),
-      el('div', { class: 'sidebar-note' }, text('strong', '', 'Consent is only the beginning.'), text('p', '', 'Identity, authority, and the account link are verified before activation.')),
+  root.replaceChildren(portalHeader(), el('div', { class: 'app-shell' },
+    el('aside', { class: 'sidebar' }, text('p', 'eyebrow sidebar-label', isProvider ? 'PROVIDER EXPERIENCE' : 'CUSTOMER EXPERIENCE'),
+      el('nav', { 'aria-label': isProvider ? 'Provider navigation' : 'Customer navigation' },
+        el('a', { class: 'nav-active', href: '#main', 'aria-current': 'page' }, isProvider ? 'Customer connections' : 'Webex organization')),
+      el('div', { class: 'sidebar-note' }, text('strong', '', 'Customer-initiated onboarding'), text('p', '', 'Verify identity, review the organization, and confirm the account link.')),
       el('div', { class: 'account' }, text('strong', '', session.account.name), text('small', '', session.account.email),
         button('Sign out', async () => { await api('/api/logout', {}); people = []; notice = ''; }, true))),
     el('main', { id: 'main', class: 'workspace', 'aria-busy': busy }, banner(),
@@ -164,6 +171,7 @@ function render() {
       text('footer', 'fine', 'Webex developer sample · Read-only directory access · Secrets stay on the server'))));
 }
 try {
+  await customElements.whenDefined('mdc-button');
   await refresh();
   const query = new URLSearchParams(window.location.search);
   notice = query.get('notice') || '';

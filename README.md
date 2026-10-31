@@ -15,11 +15,12 @@ The [provider console screenshot](docs/screenshots/provider-console.png) shows t
 
 ## Run locally
 
-Requires **Node.js 24.13 or later in the 24.x release line**. There are no runtime dependencies and no `npm install` step. Node's built-in SQLite module currently emits an experimental-feature warning.
+Requires **Node.js 24.13 or later in the 24.x release line**. The server uses Node's built-in APIs; the browser uses locked Momentum Design components, theme tokens, and fonts served locally. Node's built-in SQLite module currently emits an experimental-feature warning.
 
 ```sh
 git clone https://github.com/WebexSamples/webex-service-app-provider-sample.git
 cd webex-service-app-provider-sample
+npm ci --ignore-scripts
 npm run setup
 npm start
 ```
@@ -77,9 +78,11 @@ For browser smoke tests, install Python Playwright and its Chromium browser in a
 | `lib/webex.mjs` | Fixed-origin Webex API calls and response validation |
 | `lib/security.mjs` | Password hashing, authenticated encryption, identity normalization |
 | `lib/store.mjs` | SQLite persistence and audit history |
-| `public/` | Browser UI; no secrets or third-party scripts |
+| `public/` | Browser UI with Momentum Design; no secrets or CDN requests |
 | `test/` | Node's built-in test runner |
 
 Mode-specific databases live in `.data/demo.sqlite` and `.data/live.sqlite`. Sessions, pending OAuth states, and short-lived identity proofs live only in memory and expire; restarting requires sign-in and a fresh verification. Directory entries are returned to the customer's browser and are not persisted in SQLite. Tokens are encrypted with tenant-bound AES-256-GCM; the ignored `.env` contains the local encryption key and configured Webex client secrets. Back up the key separately from the database. Changing or losing the key makes saved credentials unreadable.
 
 Keep `.env`, `.data/`, runtime artifacts, and customer data out of Git. See [security boundaries](SECURITY.md), [contributing](CONTRIBUTING.md), and the [MIT license](LICENSE).
+
+The UI uses `@momentum-design/components` pinned to `0.137.2`, matching the Developer Portal Contributor Hub, with pinned theme/font packages in `package-lock.json`. The server exposes only the required asset paths, keeping the existing same-origin Content Security Policy. Native login fields and submit controls preserve browser validation, Enter submission, and password-manager support.
