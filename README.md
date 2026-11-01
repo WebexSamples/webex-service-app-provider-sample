@@ -5,7 +5,7 @@ A small web app for validating **customer-initiated organization linking**. A cu
 Two authenticated experiences share one backend:
 
 - **Provider administrator:** configure the provider Integration, inspect customer connection metadata, and exercise simulated Control Hub approvals in demo mode. This role cannot view customer directories.
-- **Customer administrator:** verify a Webex account, confirm the organization link, read a paginated directory, and disconnect. This role sees only its own provider tenant.
+- **Customer administrator:** verify a Webex account, confirm the organization link, read a paginated directory, manage an optional Data Source registration, and disconnect. This role sees only its own provider tenant.
 
 This is an independent sample, not an official onboarding requirement or a production SaaS platform. Webex API behavior is covered by mocked contract tests; live acceptance requires your own registered apps and organization. See [validation](docs/VALIDATION.md).
 
@@ -55,6 +55,14 @@ Demo and live mode have separate databases and accounts. Complete the same prote
 
 The permanent **DEMO MODE** banner identifies fixture data. Demo mode makes no Webex requests, and demo mutation endpoints are disabled in live mode. The fixture authority selector is intentionally a simulation, not an authentication mechanism.
 
+### Try the Data Source example
+
+After linking a demo customer, open **Register a data source** under **Customer Data Source**, review its customer-specific endpoint, and select **Confirm register data source**. Then refresh its status, renew its delivery token, or expand **Remove data source** and confirm removal. Directory access remains connected after removal.
+
+Demo registrations are persisted fixtures. Live mode uses the Webex Data Sources API with the customer's Service App token. The provider configures the approved schema and endpoint in the existing setup screen; no new environment variables are needed. See [Data Source setup and boundaries](docs/DATA_SOURCES.md).
+
+![Customer Data Source registration with fictional demo data](docs/screenshots/customer-data-source.png)
+
 To unlink a customer, expand **Disconnect organization**, review the effect, and select **Confirm disconnect**. Opening the disclosure leaves the connection active. Control Hub authorization is managed separately.
 
 ## Use real Webex apps
@@ -82,7 +90,7 @@ For browser smoke tests, install Python Playwright and its Chromium browser in a
 | --- | --- |
 | `server.mjs` | Loopback HTTP server and startup |
 | `lib/config.mjs` | Private local key creation and registration-field allow-list |
-| `lib/app.mjs` | Sessions, permissions, OAuth, linking, directory, lifecycle events |
+| `lib/app.mjs` | Sessions, permissions, OAuth, linking, directory, Data Sources, lifecycle events |
 | `lib/webex.mjs` | Fixed-origin Webex API calls and response validation |
 | `lib/security.mjs` | Password hashing, authenticated encryption, identity normalization |
 | `lib/store.mjs` | SQLite persistence and audit history |

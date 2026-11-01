@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { createWebex } from '../lib/webex.mjs';
 import { orgKey, vault, random, hashPassword, verifyPassword } from '../lib/security.mjs';
+import { dataSourceSettings } from '../lib/config.mjs';
 
 const response = (data, status = 200, headers = {}) => new Response(JSON.stringify(data), { status, headers });
 test('identity checks the authenticated person role, not merely an administrator-visible roles list', async () => {
@@ -61,4 +62,47 @@ test('organization comparison normalizes API IDs without guessing based on names
   assert.equal(orgKey(Buffer.from(`ciscospark://us/ORGANIZATION/${id}`).toString('base64')), id);
   assert.equal(orgKey(id), id);
   assert.throws(() => orgKey('https://evil.example'));
+});
+
+test('Data Source calls follow the write contract, handle 204/404 removal, and sanitize scope denials', async () => {
+  const calls = [], token = random();
+  const payload = { schemaId: 'schema', url: 'https://provider.example/customers/summit', audience: 'ServiceAppStudio',
+    subject: 'callAudioData', nonce: random(), tokenLifetimeMinutes: 60 };
+  const api = createWebex({}, async (url, options) => {
+    calls.push({ path: url.pathname, method: options.method, body: options.body });
+    assert.equal(options.headers.Authorization, `Bearer ${token}`);
+    return options.method === 'DELETE' ? new Response(null, { status: 204 }) : response({ id: 'source-id', ...payload });
+  });
+  await api.dataSource('register', null, payload, token);
+  await api.dataSource('read', 'source-id', undefined, token);
+  await api.dataSource('renew', 'source-id', { ...payload, status: 'active' }, token);
+  assert.equal(await api.dataSource('remove', 'source-id', undefined, token), null);
+  assert.deepEqual(calls.map(c => [c.path, c.method]), [['/v1/dataSources', 'POST'], ['/v1/dataSources/source-id', 'GET'],
+    ['/v1/dataSources/source-id', 'PUT'], ['/v1/dataSources/source-id', 'DELETE']]);
+  assert.deepEqual(JSON.parse(calls[0].body), payload);
+  assert.equal(JSON.parse(calls[2].body).status, 'active');
+  const missing = createWebex({}, async () => response({}, 404));
+  assert.equal(await missing.dataSource('remove', 'source-id', undefined, token), null);
+  const denied = createWebex({}, async () => response({ jwsToken: token }, 403));
+  await assert.rejects(denied.dataSource('register', null, payload, token), e => e.code === 'datasource_denied' && !e.message.includes(token));
+  await assert.rejects(api.dataSource('remove', '../people', undefined, token));
+  assert.equal(calls.length, 4);
+  let attempts = 0;
+  const uncertain = createWebex({}, async () => { attempts++; throw new Error('Lost response'); });
+  await assert.rejects(uncertain.dataSource('register', null, payload, token), e => e.code === 'datasource_uncertain');
+  assert.equal(attempts, 1);
+});
+
+test('Data Source setup accepts only a complete schema and credential-free public HTTPS base URL', () => {
+  const schema = '5397013b-7920-4ffc-807c-e8a3e0a18f43';
+  assert.equal(dataSourceSettings({ MODE: 'live' }), null);
+  assert.equal(dataSourceSettings({ MODE: 'demo' }).baseUrl, 'https://provider.example');
+  for (const base of ['http://provider.example', 'https://localhost', 'https://127.0.0.1', 'https://[::1]',
+    'https://provider.example/?token=private', 'https://user:secret@provider.example', 'https://provider.example/#private',
+    'https://provider.local', 'https://provider.example:8443']) {
+    assert.throws(() => dataSourceSettings({ DATASOURCE_SCHEMA_ID: schema, DATASOURCE_BASE_URL: base }));
+  }
+  assert.throws(() => dataSourceSettings({ DATASOURCE_SCHEMA_ID: schema }));
+  assert.deepEqual(dataSourceSettings({ DATASOURCE_SCHEMA_ID: schema, DATASOURCE_BASE_URL: 'https://provider.example/api/' }),
+    { schemaId: schema, baseUrl: 'https://provider.example/api' });
 });

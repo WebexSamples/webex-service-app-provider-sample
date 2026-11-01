@@ -12,6 +12,8 @@ The local sample does not reproduce App Hub discovery, review, approval, listing
 
 The organization-linking algorithm, separate OAuth contexts, Service App token endpoint, encrypted tenant-specific token storage, and directory API should remain the same. If real external-org testing reveals different API behavior, fix and test that behavior explicitly; do not add an App Hub toggle that bypasses verification.
 
+If demonstrating [Data Sources](DATA_SOURCES.md), include the data exchange schema, receiver domain, and Data Source scopes in the App Hub submission. Validate registration, renewal, removal, and organization isolation separately for both external customers. Endpoint registration alone does not validate the receiver or its consuming Webex feature.
+
 ## External-customer acceptance
 
 - Customer A authorizes the exact listed Service App in its Control Hub; no provider tenant is linked automatically.

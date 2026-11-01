@@ -349,3 +349,101 @@ test('registration changes during an OAuth exchange cannot store the old token o
   assert.equal(f.store.setting('provider_tokens'), undefined);
   assert.equal(f.config.PROVIDER_WEBEX_PERSON_ID, '');
 });
+
+test('Data Source lifecycle is confirmed, persistent, encrypted, and isolated to each customer', async t => {
+  const f = await fixture(t);
+  assert.equal((await f.summit.request('/api/data-source', { action: 'register', confirm: true })).status, 409);
+  assert.equal((await f.provider.request('/api/data-source', { action: 'register', confirm: true })).status, 403);
+  await approve(f); await approve(f, 'demo-northstar'); await connect(f.summit); await connect(f.northstar, 'demo-northstar');
+  assert.equal((await f.summit.request('/api/data-source', { action: 'register' })).status, 400);
+  assert.equal((await f.summit.request('/api/data-source', { action: 'register', confirm: true, orgId: 'demo-northstar' })).status, 400);
+  const first = await f.summit.request('/api/data-source', { action: 'register', confirm: true });
+  assert.equal(first.status, 200); assert.equal(first.data.dataSource.url, 'https://provider.example/customers/summit');
+  assert.equal((await f.summit.request('/api/data-source', { action: 'register', confirm: true })).status, 409);
+  assert.equal((await f.northstar.request('/api/state')).data.dataSource, null);
+  const second = await f.northstar.request('/api/data-source', { action: 'register', confirm: true });
+  assert.notEqual(first.data.dataSource.id, second.data.dataSource.id);
+  assert.equal(second.data.dataSource.url, 'https://provider.example/customers/northstar');
+  const row = f.store.get("SELECT record FROM data_sources WHERE tenant_id='summit'");
+  assert.ok(!row.record.includes('provider.example'));
+  assert.throws(() => vault(f.config.ENCRYPTION_KEY).open(row.record, 'datasource:northstar'));
+  const before = vault(f.config.ENCRYPTION_KEY).open(row.record, 'datasource:summit');
+  assert.equal((await f.summit.request('/api/data-source', { action: 'renew' })).status, 200);
+  const after = vault(f.config.ENCRYPTION_KEY).open(f.store.get("SELECT record FROM data_sources WHERE tenant_id='summit'").record, 'datasource:summit');
+  assert.notEqual(after.nonce, before.nonce);
+  const state = (await f.summit.request('/api/state')).data;
+  assert.equal(state.dataSource.matchesConnection, true);
+  assert.ok(!JSON.stringify(state).includes(after.nonce));
+  assert.equal((await f.provider.request('/api/state')).data.dataSource, null);
+  await f.summit.request('/api/logout', {}); await f.summit.login('summit@example.test');
+  assert.equal((await f.summit.request('/api/state')).data.dataSource.id, first.data.dataSource.id);
+  assert.equal((await f.summit.request('/api/data-source', { action: 'read' })).status, 200);
+  assert.equal((await f.summit.request('/api/data-source', { action: 'remove' })).status, 400);
+  assert.equal((await f.summit.request('/api/data-source', { action: 'remove', confirm: true })).status, 200);
+  assert.equal((await f.summit.request('/api/state')).data.dataSource, null);
+  assert.equal((await f.summit.request('/api/directory', {})).status, 200);
+  assert.equal((await f.northstar.request('/api/state')).data.dataSource.id, second.data.dataSource.id);
+});
+
+test('disconnect retains the registration, and another organization cannot manage it', async t => {
+  const f = await fixture(t, 'demo', undefined, { managedConfiguration: true });
+  await approve(f); await approve(f, 'demo-northstar'); await connect(f.summit);
+  await f.summit.request('/api/data-source', { action: 'register', confirm: true });
+  await f.summit.request('/api/disconnect', { confirm: true });
+  assert.equal((await f.summit.request('/api/state')).data.dataSource.matchesConnection, false);
+  assert.equal((await f.provider.request('/api/provider/settings', { DATASOURCE_SCHEMA_ID: '5397013b-7920-4ffc-807c-e8a3e0a18f43', DATASOURCE_BASE_URL: 'https://replacement.example' })).status, 409);
+  await connect(f.summit, 'demo-northstar');
+  for (const action of ['read', 'renew', 'remove']) assert.equal((await f.summit.request('/api/data-source', { action, confirm: true })).status, 409);
+  await f.summit.request('/api/disconnect', { confirm: true });
+  await connect(f.summit);
+  assert.equal((await f.summit.request('/api/data-source', { action: 'remove', confirm: true })).status, 200);
+});
+
+test('live Data Sources use Service App tokens, discard delivery tokens, and block disconnect during a write', async t => {
+  const entering = Promise.withResolvers(), release = Promise.withResolvers(), access = random(), jws = random();
+  let calls = 0;
+  const f = await fixture(t, 'live', { dataSource: async (action, id, payload, token) => {
+    calls++; assert.equal(action, 'register'); assert.equal(token, access); assert.equal(id, undefined);
+    assert.equal(payload.url, 'https://provider.example/connector/customers/summit');
+    assert.equal(payload.orgId, undefined); assert.equal(payload.tokenLifetimeMinutes, 60);
+    entering.resolve(); await release.promise;
+    return { id: 'live-source', orgId: 'org-one', ...payload, jwsToken: jws, status: 'active' };
+  } }, { config: { DATASOURCE_SCHEMA_ID: '5397013b-7920-4ffc-807c-e8a3e0a18f43', DATASOURCE_BASE_URL: 'https://provider.example/connector' } });
+  const box = vault(f.config.ENCRYPTION_KEY);
+  f.store.run("UPDATE tenants SET org_id=?,webex_org_id=?,status='Connected',credentials=? WHERE id='summit'",
+    'org-one', Buffer.from('ciscospark://us/ORGANIZATION/org-one').toString('base64'), box.seal({ access_token: access, obtained_at: Date.now(), expires_in: 3600 }, 'summit'));
+  const pending = f.summit.request('/api/data-source', { action: 'register', confirm: true });
+  await entering.promise;
+  try {
+    assert.equal((await f.summit.request('/api/disconnect', { confirm: true })).status, 409);
+    assert.equal((await f.summit.request('/api/data-source', { action: 'register', confirm: true })).status, 409);
+  } finally { release.resolve(); }
+  const result = await pending; assert.equal(result.status, 200); assert.equal(calls, 1);
+  assert.ok(!JSON.stringify(result.data).includes(jws));
+  const state = (await f.summit.request('/api/state')).data;
+  assert.equal(state.dataSource.matchesConnection, true);
+  assert.ok(!JSON.stringify(state).includes(access));
+  assert.ok(!JSON.stringify(box.open(f.store.get("SELECT record FROM data_sources WHERE tenant_id='summit'").record, 'datasource:summit')).includes(jws));
+});
+
+test('missing Data Source scope keeps the working organization link and directory credentials', async t => {
+  const f = await fixture(t, 'live', { dataSource: async () => { throw new AppError(502, 'Data Source scope required', 'datasource_denied'); } },
+    { config: { DATASOURCE_SCHEMA_ID: '5397013b-7920-4ffc-807c-e8a3e0a18f43', DATASOURCE_BASE_URL: 'https://provider.example' } });
+  const sealed = vault(f.config.ENCRYPTION_KEY).seal({ access_token: random(), obtained_at: Date.now(), expires_in: 3600 }, 'summit');
+  f.store.run("UPDATE tenants SET org_id='org-one',webex_org_id='org-one',status='Connected',credentials=? WHERE id='summit'", sealed);
+  assert.equal((await f.summit.request('/api/data-source', { action: 'register', confirm: true })).data.code, 'datasource_denied');
+  assert.equal(f.store.get("SELECT credentials FROM tenants WHERE id='summit'").credentials, sealed);
+  assert.equal(f.store.get("SELECT tenant_id FROM data_sources WHERE tenant_id='summit'"), undefined);
+});
+
+test('Data Source response checks reject a mismatched organization, endpoint, or schema', async t => {
+  let altered;
+  const f = await fixture(t, 'live', { dataSource: async (_action, _id, payload) => ({ id: 'source-id', ...payload, ...altered }) },
+    { config: { DATASOURCE_SCHEMA_ID: '5397013b-7920-4ffc-807c-e8a3e0a18f43', DATASOURCE_BASE_URL: 'https://provider.example' } });
+  const sealed = vault(f.config.ENCRYPTION_KEY).seal({ access_token: random(), obtained_at: Date.now(), expires_in: 3600 }, 'summit');
+  f.store.run("UPDATE tenants SET org_id='org-one',webex_org_id='org-one',status='Connected',credentials=? WHERE id='summit'", sealed);
+  for (altered of [{ orgId: 'org-two' }, { url: 'https://provider.example/customers/northstar' }, { schemaId: 'different-schema' }]) {
+    assert.equal((await f.summit.request('/api/data-source', { action: 'register', confirm: true })).status, 502);
+    assert.equal(f.store.get("SELECT tenant_id FROM data_sources WHERE tenant_id='summit'"), undefined);
+  }
+});

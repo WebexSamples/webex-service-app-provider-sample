@@ -49,7 +49,7 @@ function portalHeader() {
 }
 function banner() {
   return text('div', `mode-banner ${session.mode}`, session.mode === 'demo'
-    ? 'DEMO MODE · Fixture identities and directory data. No Webex requests are made.'
+    ? 'DEMO MODE · Fixture identities, directory data, and Data Sources. No Webex requests are made.'
     : 'LIVE MODE · Real Webex authorization, identities, and customer organization data.');
 }
 function message() { return notice ? el('div', { class: `notice ${isError ? 'error' : ''}`, role: isError ? 'alert' : 'status' }, notice) : null; }
@@ -117,6 +117,11 @@ function providerSettings() {
     'spark:people_read, spark-admin:people_read, spark-admin:roles_read', '/oauth/customer/callback',
     [field('Customer Integration client ID', 'CUSTOMER_INTEGRATION_CLIENT_ID', 'text', saved.customerClientId, { maxlength: '2048' }),
       secret('Customer Integration client secret', 'CUSTOMER_INTEGRATION_CLIENT_SECRET', c.customerOAuth)]),
+  el('fieldset', { class: 'registration' }, el('legend', {}, 'Optional Data Source example'),
+    text('p', 'muted', 'Add spark-admin:datasource_read and spark-admin:datasource_write to the Service App. Select its data exchange schema and domain, then have the Full Administrator reauthorize those changes.'),
+    field('Data Source schema ID', 'DATASOURCE_SCHEMA_ID', 'text', saved.dataSourceSchemaId, { maxlength: '36', placeholder: 'Schema UUID selected on the Service App' }),
+    field('Data Source endpoint base URL', 'DATASOURCE_BASE_URL', 'url', saved.dataSourceBaseUrl, { maxlength: '2048', placeholder: 'https://connector.example.com' }),
+    text('p', 'fine', 'The sample appends /customers/<provider-customer-id> to this base URL. Host a compatible receiver there and use a domain approved on the Service App. Leave both fields empty to keep this example unconfigured.')),
   field('Optional webhook signing secret', 'WEBHOOK_SECRET', 'password', '', { maxlength: '2048', placeholder: c.webhook ? 'Saved · leave blank to keep' : 'Leave blank if not using lifecycle webhooks' }),
   text('p', 'fine', 'Blank secret fields keep saved secrets. Supply all fields for each registration you add. Disconnect customer organizations before replacing registrations.'),
   el('button', { class: 'button', type: 'submit', disabled: busy }, 'Save available registrations'));
@@ -229,11 +234,47 @@ function customer() {
   const disconnect = t.orgId ? el('details', { class: 'disconnect-confirmation' },
     el('summary', {}, 'Disconnect organization'),
     el('div', { class: 'disconnect-review' }, text('h2', '', 'Disconnect this organization?'),
-      text('p', 'fine', 'This removes stored Service App credentials and releases this account link. It does not revoke the Service App in Control Hub. Reconnecting requires Webex verification and confirmation again.'),
+      text('p', 'fine', 'This removes stored Service App credentials and releases this account link. It does not revoke the Service App in Control Hub or remove a Data Source from Webex. Remove the Data Source first, or reconnect the same organization to manage it later. Reconnecting requires Webex verification and confirmation again.'),
       button('Confirm disconnect', async () => {
         await api('/api/disconnect', { confirm: true }); people = []; notice = 'Disconnected. Revoke authorization separately in Control Hub if needed.';
       }, true))) : null;
-  return [summary, directory, ...(t.status === 'Connected' ? [] : [guide, el('section', { class: 'panel' }, verification), confirmation]), disconnect, auditPanel()];
+  return [summary, directory, dataSourcePanel(t), ...(t.status === 'Connected' ? [] : [guide, el('section', { class: 'panel' }, verification), confirmation]), disconnect, auditPanel()];
+}
+function dataSourcePanel(t) {
+  const saved = state.dataSource, setup = state.dataSourceSetup;
+  if (t.status !== 'Connected' && !saved) return null;
+  const connected = t.status === 'Connected' && (!saved || saved.matchesConnection);
+  const action = (label, name, secondary = false) => {
+    const control = button(label, async () => {
+      await api('/api/data-source', { action: name, ...(['register', 'remove'].includes(name) ? { confirm: true } : {}) });
+      notice = { register: 'Data Source registered. Registration does not verify receiver connectivity.', read: 'Data Source status refreshed.',
+        renew: 'Data Source delivery token renewed. The token stays on the server.', remove: 'Data Source removed.' }[name];
+    }, secondary);
+    if (!connected) control.setAttribute('disabled', '');
+    return control;
+  };
+  const endpoint = saved || setup;
+  return el('section', { class: 'panel', id: 'data-source' }, text('p', 'eyebrow', 'PROVIDER ENDPOINT · BYODS'),
+    el('div', { class: 'section-heading' }, text('h2', '', 'Customer Data Source'), saved ? pill(saved.status) : null),
+    text('p', 'muted', session.mode === 'demo' ? 'Register a simulated provider endpoint for this customer. No Webex requests or deliveries occur.'
+      : 'Register the provider endpoint where Webex can send data for this organization. A compatible receiver is required; this sample does not implement one.'),
+    endpoint ? el('dl', { class: 'source-details' },
+      el('dt', {}, 'Customer endpoint'), el('dd', { class: 'identifier' }, endpoint.url),
+      el('dt', {}, 'Schema ID'), el('dd', { class: 'identifier' }, endpoint.schemaId),
+      saved ? [el('dt', {}, 'Data Source ID'), el('dd', { class: 'identifier' }, saved.id),
+        el('dt', {}, 'Renew by (local estimate)'), el('dd', {}, date(saved.renewBy))] : null) : null,
+    !connected ? text('p', 'fine', 'The registration remains in Webex. Reconnect its original organization to refresh, renew, or remove it.')
+      : !setup && !saved ? text('p', 'fine', 'The provider must configure a Data Source schema and endpoint base URL before registration.') : null,
+    saved ? [text('p', 'fine', 'Status is the last reported registration state. It does not prove endpoint health. Delivery tokens last 60 minutes and must be renewed before expiry; this sample renews only when you select the button.'),
+      el('div', { class: 'source-actions' }, action('Refresh data source', 'read', true), action('Renew delivery token', 'renew', true)),
+      el('details', { class: 'disconnect-confirmation' }, el('summary', {}, 'Remove data source'),
+        el('div', { class: 'disconnect-review' }, text('h3', '', 'Remove this registration from Webex?'),
+          text('p', 'fine', 'This removes only this customer’s saved Data Source. It leaves the organization link and directory access connected.'),
+          action('Confirm remove data source', 'remove', true)))]
+      : connected && setup ? el('details', { class: 'disconnect-confirmation' }, el('summary', {}, 'Register a data source'),
+        el('div', { class: 'disconnect-review' }, text('h3', '', 'Register this customer endpoint?'),
+          text('p', 'fine', 'Webex may send data to the endpoint above when a consuming feature is configured. Confirm the endpoint and approved schema before registering.'),
+          action('Confirm register data source', 'register'))) : null);
 }
 async function loadDirectory(more) {
   if (!more) people = [];
@@ -257,7 +298,7 @@ function render() {
       el('header', { class: 'page-heading' }, el('div', {}, text('p', 'eyebrow', 'SERVICE APP STUDIO'), text('h1', '', isProvider ? 'Customer connections' : 'Your Webex organization')),
         button('Refresh status', async () => { people = []; hasMore = false; }, true)), message(),
       state ? (isProvider ? provider() : customer()) : text('p', '', 'Loading connection status…'),
-      text('footer', 'fine', 'Webex developer sample · Read-only directory access · Secrets stay on the server'))));
+      text('footer', 'fine', 'Webex developer sample · Directory and Data Source examples · Secrets stay on the server'))));
 }
 try {
   const fragment = new URLSearchParams(location.hash.slice(1));

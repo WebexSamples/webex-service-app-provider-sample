@@ -49,6 +49,8 @@ def first_run_smoke(browser):
                 ("Service App client secret", client_secret), ("Provider Integration client ID", "sample-provider-client"),
                 ("Provider Integration client secret", client_secret), ("Customer Integration client ID", "sample-customer-client"),
                 ("Customer Integration client secret", client_secret),
+                ("Data Source schema ID", "5397013b-7920-4ffc-807c-e8a3e0a18f43"),
+                ("Data Source endpoint base URL", "https://connector.example.com"),
             ]:
                 page.get_by_label(label, exact=True).fill(value)
             page.get_by_role("button", name="Save available registrations", exact=True).click()
@@ -73,6 +75,7 @@ def first_run_smoke(browser):
             page.get_by_label("Password", exact=True).press("Enter")
             page.get_by_role("button", name="Edit registration details", exact=True).click()
             expect(page.get_by_label("Service App ID", exact=True)).to_have_value("sample-service-app")
+            expect(page.get_by_label("Data Source endpoint base URL", exact=True)).to_have_value("https://connector.example.com")
             expect(page.get_by_label("Service App client secret", exact=True)).to_have_value("")
             expect(page.get_by_label("Service App client secret", exact=True)).to_have_attribute("placeholder", "Saved · leave blank to keep")
         finally:
@@ -174,6 +177,22 @@ def main():
                 customer.evaluate("window.scrollTo(0, 0)")
                 customer.screenshot(path=str(ARTIFACTS / "customer-directory.png"))
 
+                source = customer.locator("#data-source")
+                expect(source.get_by_role("heading", name="Customer Data Source", exact=True)).to_be_visible()
+                expect(source).to_contain_text("https://provider.example/customers/summit")
+                source.get_by_text("Register a data source", exact=True).click()
+                source.get_by_role("button", name="Confirm register data source", exact=True).click()
+                expect(customer.get_by_role("status")).to_contain_text("Data Source registered")
+                expect(source.get_by_text("active", exact=True)).to_be_visible()
+                source.get_by_role("button", name="Renew delivery token", exact=True).click()
+                expect(customer.get_by_role("status")).to_contain_text("delivery token renewed")
+                source.get_by_role("button", name="Refresh data source", exact=True).click()
+                expect(customer.get_by_role("status")).to_contain_text("status refreshed")
+                source.screenshot(path=str(ARTIFACTS / "customer-data-source.png"))
+                check_mobile(customer, "customer-data-source")
+                customer.reload()
+                expect(source.get_by_text("active", exact=True)).to_be_visible()
+
                 other_context, other = login("northstar@example.test")
                 other.get_by_label("Fixture organization").select_option("demo-summit")
                 other.get_by_role("button", name="Verify fixture identity", exact=True).click()
@@ -194,8 +213,15 @@ def main():
                 expect(customer.get_by_role("heading", name="Organization directory", exact=True)).to_be_visible()
                 customer.get_by_role("button", name="Confirm disconnect", exact=True).click()
                 expect(customer.get_by_role("heading", name="Organization directory", exact=True)).to_have_count(0)
+                expect(source).to_contain_text("registration remains in Webex")
+                expect(source.get_by_role("button", name="Renew delivery token", exact=True)).to_be_disabled()
                 customer.get_by_role("button", name="Verify fixture identity", exact=True).click()
                 customer.get_by_role("button", name="Confirm link and activate Service App", exact=True).click()
+                expect(customer.get_by_role("heading", name="Organization directory", exact=True)).to_be_visible()
+                source.get_by_text("Remove data source", exact=True).click()
+                source.get_by_role("button", name="Confirm remove data source", exact=True).click()
+                expect(customer.get_by_role("status")).to_contain_text("Data Source removed")
+                expect(source.get_by_text("Register a data source", exact=True)).to_be_visible()
                 expect(customer.get_by_role("heading", name="Organization directory", exact=True)).to_be_visible()
 
                 provider.get_by_role("button", name="Deauthorize Summit Outfitters Webex", exact=True).click()
@@ -213,7 +239,7 @@ def main():
                 for context in [provider_context, customer_context, other_context]:
                     context.close()
                 browser.close()
-            print("Browser smoke passed: no-env first launch, setup choices, encrypted credentials across restart, customer accounts, Momentum assets, keyboard controls, role isolation, explicit linking, pagination, claim conflict, inline disconnect/reconnect, deauthorization, and 320/390px layouts.")
+            print("Browser smoke passed: no-env setup/restart, encrypted credentials, Momentum controls, explicit linking, pagination, claim conflict, Data Source register/read/renew/remove and reload persistence, disconnect/reconnect, deauthorization, and 320/390px layouts.")
             print("Fixture-only screenshots: artifacts/")
         finally:
             server.terminate()

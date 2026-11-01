@@ -11,6 +11,7 @@ Implemented protections:
 - Unique canonical organization claims, connection revisions, and in-process guards against concurrent linking. A single process is required; do not scale this session/locking model across workers.
 - Salted scrypt password hashes and generated AES-256-GCM keys. Credential ciphertext is bound to a tenant via authenticated additional data. Saved tokens and client secrets are never returned to the UI, logged, or stored in browser storage. Provider credential forms send newly entered values to the server once, then clear them.
 - Customer OAuth tokens discarded after verification; provider and Service App token pairs encrypted separately and refreshed using their own client credentials.
+- Data Source management uses the linked customer's Service App token and a server-derived endpoint path. The API accepts only an action and confirmation, never a caller-supplied organization, Data Source ID, or endpoint. Saved management metadata is encrypted under a separate tenant-bound context; returned delivery JWS tokens are discarded and never shown or logged.
 - Signed optional deauthorization callbacks recheck current access rather than inferring event ordering from envelope metadata. Confirmed API access denial disables access and removes credentials.
 - Strict same-origin Content Security Policy, no inline or CDN scripts, locked Momentum browser assets served through an explicit route allow-list, safe text-based DOM rendering, no secret material in static files, and no caching of app/API responses.
 
@@ -23,5 +24,7 @@ Known boundaries:
 - A directory read can fail due to revoked consent, missing scope, or invalid credentials. HTTP 401/403 disables the connection conservatively; an operator must resolve the cause and reconnect.
 - Without configured webhook subscriptions, there is no immediate revocation notification. The next Webex request detects denial. The app has no background polling or synchronization.
 - Refresh status clears the browser's directory view. The sample does not push revocation to already-open browsers or erase data they previously received.
+- Data Sources are optional remote writes. A Data Source HTTP 403 reports missing scopes/schema/domain or authorization without deleting otherwise usable directory credentials; HTTP 401 retains the existing conservative disconnection behavior. Local disconnect leaves the remote registration and its encrypted management record intact; reconnect the original organization to manage it. Provider settings cannot change while saved registrations remain.
+- The sample does not host a receiver, validate inbound delivery JWS tokens, configure a consuming Webex feature, or renew delivery tokens automatically. Registration is not a connectivity or health test. Webex enforces approved schemas/domains; this server never fetches the configured receiver URL. After an ambiguous registration failure, inspect Webex before retrying to avoid creating a duplicate.
 
 For vulnerabilities, use the repository's private GitHub security reporting if enabled. Do not post secrets, customer information, or exploit credentials in public issues.

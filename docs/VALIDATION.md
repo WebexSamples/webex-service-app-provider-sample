@@ -30,6 +30,16 @@ The Chromium smoke launched the real server with only `PATH` in its environment,
 
 For the existing local sandbox installation, migration read-back verified that the generated private key file retained the original encryption key, imported registration fields matched the legacy configuration, and existing encrypted provider/Service App token records remained readable. No credential values or customer data were captured. This was a local storage migration check, not a new live Webex API or authorization test.
 
+## Data Source example — October 31, 2026
+
+JavaScript syntax checks and 30 Node tests passed. Added contracts cover the fixed-origin Data Source POST/GET/PUT/DELETE paths, Service App bearer context, complete renewal payload, 204 deletion, already-removed 404 handling, and sanitized Data Source scope denials. Registration writes are not retried automatically after an ambiguous response. Setup validation rejects incomplete schema/URL pairs and endpoint credentials, query strings, fragments, local/IP destinations, and non-default ports.
+
+HTTP tests exercise explicit register/remove confirmation, provider-role denial, rejection of browser-supplied IDs/organizations/endpoints, tenant-specific endpoint derivation, encrypted metadata and nonce storage, token redaction/discard, distinct registrations for two tenants, persistent re-login, fresh renewal nonces, and continued directory access after removal. Disconnect retains the record; another connected organization cannot manage it. In-flight writes block a concurrent disconnect or second mutation. Missing optional-feature scope leaves the directory connection's credentials intact.
+
+The isolated Chromium walkthrough passed the complete Data Source register/read/renew/remove flow. It checked persistence after reload, disabled actions after local disconnect, management after reconnecting, optional provider settings restored after server restart, and layouts at 320px and 390px. Desktop and mobile fixture screenshots were visually reviewed. No dependency was added.
+
+No live Data Source API request, scope grant, schema/domain change, endpoint deployment, inbound JWS verification, natural delivery-token expiry, or actual Webex data delivery was performed for this addition. Existing live sandbox directory evidence below does not establish live Data Source support. Live validation requires the additional grants and approved receiver configuration described in [Data Source setup](DATA_SOURCES.md).
+
 ## Live provider setup and admin approval — October 31, 2026
 
 Using a Chrome profile already signed into the sandbox administrator account, the run reused the three existing Service App Studio registrations and their previously approved scopes. No additional registrations or webhook subscriptions were needed. The server ran with its environment cleared except for `PATH`, using the generated key file and encrypted registration settings.

@@ -9,6 +9,8 @@ In [My Webex Apps](https://developer.webex.com/my-apps), create a Service App un
 - `spark-admin:people_read` — read the organization directory.
 - `spark-admin:organizations_read` — verify and display organization details.
 
+For the optional [Data Source example](DATA_SOURCES.md), also select `spark-admin:datasource_read` and `spark-admin:datasource_write`, plus a data exchange schema and your receiver's domain. Existing installations need a Full Administrator to reauthorize these changes; the separate provider/customer Integrations do not need additional scopes.
+
 Enter its application ID, client ID, and client secret in the provider’s **Webex registrations** screen. The application ID and OAuth client ID are different identifiers; do not substitute one for the other.
 
 For the own-org test, request admin authorization to make the app visible, then have a Full Admin authorize it under **Control Hub → Management → Apps → Service Apps**. Follow the [Service App guide](https://developer.webex.com/admin/docs/service-apps). External-customer availability is a separate [App Hub transition](APP_HUB_TRANSITION.md).
