@@ -50,6 +50,12 @@ The provider UI separates **Developer Connections** from **Customers** and **Con
 
 JavaScript checks and all 34 Node tests passed, including the developer OAuth return route. The isolated browser walkthrough saved each registration separately, checked status changes and disabled connection actions before configuration, confirmed that setup fields and the customer table are on different screens, and exercised direct navigation, reload, back, restart, and the existing fixture onboarding/Data Source lifecycle. Desktop and 320px/390px layouts were inspected. Existing local credentials and Webex access grants were not changed by this UI work; no new live Webex API verification was performed.
 
+## Overview landing page — November 2, 2026
+
+Provider sessions now open on Overview. It explains the sample and customer onboarding flow, shows saved setup status and connected customer counts, and links to the first incomplete setup step. The last successful directory read comes from existing connection metadata. These are stored-state indicators, not live Webex or receiver health probes; no new API or permissions were added.
+
+JavaScript checks and 34 Node tests passed. Browser coverage checks the empty first-run overview, the Service App setup link, the developer-connection next step after saving all registrations, a connected fixture customer count of 1/2, last-read metadata, and overview reload persistence. Credential forms and customer directory rows remain on their own screens. Desktop and 320px/390px layouts were inspected, and the complete fixture onboarding/Data Source walkthrough still passed. No new live Webex API operation was performed.
+
 ## Data Source example — October 31, 2026
 
 JavaScript syntax checks and 30 Node tests passed. Added contracts cover the fixed-origin Data Source POST/GET/PUT/DELETE paths, Service App bearer context, complete renewal payload, 204 deletion, already-removed 404 handling, and sanitized Data Source scope denials. Registration writes are not retried automatically after an ambiguous response. Setup validation rejects incomplete schema/URL pairs and endpoint credentials, query strings, fragments, local/IP destinations, and non-default ports.

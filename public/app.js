@@ -1,7 +1,7 @@
 let session, state, notice = '', isError = false, busy = false, people = [], hasMore = false;
 let setupCode = '', settingsOpen = false;
-const providerPages = ['service-app', 'developer-integration', 'customer-verification', 'customers', 'activity'];
-let providerPage = providerPages.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'service-app';
+const providerPages = ['overview', 'service-app', 'developer-integration', 'customer-verification', 'customers', 'activity'];
+let providerPage = providerPages.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'overview';
 const root = document.querySelector('#app');
 function el(tag, props = {}, ...children) {
   const node = document.createElement(tag);
@@ -83,6 +83,41 @@ function setupStatus(page) {
   return demo || c.customerOAuth ? 'Configured' : 'Needs setup';
 }
 const nextStep = (page, label) => el('a', { class: 'next-step', href: `#${page}` }, label, el('span', { 'aria-hidden': 'true' }, ' →'));
+function overview() {
+  const setup = [['service-app', 'Service App'], ['developer-integration', 'Developer Integration'], ['customer-verification', 'Customer Verification']];
+  const connected = state.tenants.filter(t => t.status === 'Connected').length;
+  const lastRead = Math.max(0, ...state.tenants.map(t => t.lastChecked || 0));
+  const pending = setup.find(([page]) => !['Configured', 'Connected'].includes(setupStatus(page)));
+  const next = pending ? pending[0] : 'customers';
+  const action = pending ? (pending[0] === 'developer-integration' && setupStatus(next) === 'Ready to connect'
+    ? (session.mode === 'demo' ? 'Connect the demo Integration' : 'Connect your Webex developer account') : `Set up ${pending[1]}`) : connected ? 'Manage customer connections' : 'Connect your first customer';
+  return [el('section', { class: 'panel overview-intro' }, text('p', 'eyebrow', 'ABOUT THIS SAMPLE'),
+    text('h2', '', 'Connect your customers to Webex'),
+    text('p', '', 'Service App Studio models a service provider that serves multiple customer organizations. Set up the developer’s Webex apps, then let each customer approve access and link its Webex organization to its provider account.'),
+    text('p', 'muted', 'Once linked, the sample uses the Service App’s machine identity to read the customer’s directory and manage an optional Data Source registration.'),
+    nextStep(next, action)),
+    el('section', { class: 'panel' }, text('h2', '', 'Current status'),
+      text('p', 'fine', 'Saved setup and last recorded activity. Configured registrations still require the customer’s approval in Webex.'),
+      el('div', { class: 'overview-status-grid' }, setup.map(([page, label]) => el('a', { class: 'overview-status', href: `#${page}` },
+        text('h3', '', label), pill(setupStatus(page)), page === 'service-app' && state.providerSetup?.serviceApp.name
+          ? text('small', 'muted', state.providerSetup.serviceApp.name) : null)),
+        el('a', { class: 'overview-status', href: '#customers' }, text('h3', '', 'Customer connections'),
+          text('strong', 'overview-count', `${connected} / ${state.tenants.length}`), text('small', 'muted', 'Customers connected'))),
+      text('p', 'overview-last-read fine', lastRead ? `Last successful directory read: ${date(lastRead)}` : 'No directory read recorded for the current connections.')),
+    el('section', { class: 'panel' }, text('h2', '', 'How customer onboarding works'),
+      el('ol', { class: 'steps' }, [
+        ['Approve in Webex', 'A customer Full Administrator authorizes the Service App for their Webex organization. Approval alone does not link a provider account.'],
+        ['Verify the administrator', 'In the customer workspace, a separate Integration verifies the administrator’s Webex identity and organization.'],
+        ['Confirm the link', 'The customer reviews and confirms the link. The backend then retrieves organization-specific Service App credentials.'],
+      ].map(([title, body]) => el('li', {}, text('strong', '', title), text('p', 'muted', body)))),
+      text('p', 'fine', session.localAccess ? 'The Experience selector switches local provider/customer workspaces without an app login. Live Webex verification is still required for a new link.'
+        : 'Provider and customer accounts have separate access. Customers verify their Webex identity from their own account.')),
+    el('section', { class: 'panel' }, text('h2', '', 'What you can try'),
+      el('ul', { class: 'overview-examples' },
+        el('li', {}, text('strong', '', 'Organization directory. '), 'Read and paginate customer members using the Service App connection, without retaining customer OAuth tokens.'),
+        el('li', {}, text('strong', '', 'Customer Data Source. '), 'Register, refresh, renew, and remove a customer-specific endpoint. Registration does not validate a receiver or data delivery.')),
+      nextStep('customers', 'View customers'), nextStep('activity', 'View connection history'))];
+}
 function providerSettings(page) {
   const c = state.configuration, saved = state.providerSetup;
   const service = page === 'service-app', developer = page === 'developer-integration';
@@ -151,7 +186,7 @@ function providerNavigation() {
     'aria-current': providerPage === page ? 'page' : null }, text('span', '', label),
     status ? el('small', { class: `nav-status ${status === 'Needs setup' ? 'pending' : status === 'Ready to connect' ? 'ready' : 'complete'}` },
       text('span', 'status-dot', ''), status) : null);
-  return el('nav', { 'aria-label': 'Provider navigation' }, text('p', 'nav-group', 'Developer Connections'),
+  return el('nav', { 'aria-label': 'Provider navigation' }, entry('overview', 'Overview'), text('p', 'nav-group', 'Developer Connections'),
     entry('service-app', 'Service App', setupStatus('service-app')),
     entry('developer-integration', 'Developer Integration', setupStatus('developer-integration')),
     entry('customer-verification', 'Customer Verification', setupStatus('customer-verification')),
@@ -201,6 +236,7 @@ function auditPanel() {
       el('time', {}, date(event.at))))) : text('p', 'muted', 'Connection activity will appear here.'));
 }
 function provider() {
+  if (providerPage === 'overview') return overview();
   if (providerPage === 'activity') return auditPanel();
   if (providerPage !== 'customers') return [providerSettings(providerPage), providerPage === 'developer-integration' ? developerConnection() : null];
   const demo = session.mode === 'demo' ? el('section', { class: 'panel demo-controls' },
@@ -326,7 +362,7 @@ function render() {
           text('small', '', 'Local workspace · no app login'))
           : [text('small', '', session.account.email), button('Sign out', async () => { await api('/api/logout', {}); people = []; notice = ''; }, true)])),
     el('main', { id: 'main', class: 'workspace', 'aria-busy': busy }, banner(),
-      el('header', { class: 'page-heading' }, el('div', {}, text('p', 'eyebrow', 'SERVICE APP STUDIO'), text('h1', '', isProvider ? (providerPage === 'customers' ? 'Customers' : providerPage === 'activity' ? 'Connection History' : 'Developer Connections') : 'Your Webex organization')),
+      el('header', { class: 'page-heading' }, el('div', {}, text('p', 'eyebrow', 'SERVICE APP STUDIO'), text('h1', '', isProvider ? (providerPage === 'overview' ? 'Overview' : providerPage === 'customers' ? 'Customers' : providerPage === 'activity' ? 'Connection History' : 'Developer Connections') : 'Your Webex organization')),
         button('Refresh status', async () => { people = []; hasMore = false; }, true)), message(),
       state ? (isProvider ? provider() : customer()) : text('p', '', 'Loading connection status…'),
       text('footer', 'fine', 'Webex developer sample · Directory and Data Source examples · Secrets stay on the server'))));

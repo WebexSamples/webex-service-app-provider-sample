@@ -24,7 +24,11 @@ npm ci --ignore-scripts
 npm start
 ```
 
-No environment variables, `.env` file, or local account are required. Open **http://localhost:3000** to enter the provider workspace. Use **Experience** in the sidebar to switch between **Provider**, **Summit Outfitters**, and **Northstar Travel**. These are local sample perspectives; Webex OAuth still verifies the developer/customer identity, and linking a customer organization still requires explicit confirmation.
+No environment variables, `.env` file, or local account are required. Open **http://localhost:3000** to enter the provider Overview. Use **Experience** in the sidebar to switch between **Provider**, **Summit Outfitters**, and **Northstar Travel**. These are local sample perspectives; Webex OAuth still verifies the developer/customer identity, and linking a customer organization still requires explicit confirmation.
+
+**Overview** explains the sample, the approval → verification → confirmation flow, and the directory/Data Source examples. Its status summary shows saved developer setup, connected customer counts, and the last successful directory read. The next-step link takes you to the first unfinished setup step, or to Customers when setup is complete. **Refresh status** reloads the sample’s stored state; it does not probe Webex or check receiver health.
+
+![Service App Studio overview with fixture status](docs/screenshots/overview.png)
 
 **Developer Connections** contains three separate setup screens:
 
