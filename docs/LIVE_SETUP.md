@@ -26,7 +26,7 @@ Use the exact provider redirect URI shown in the setup screen (`http://localhost
 
 The first successful provider OAuth connection pins the verified Webex developer identity in encrypted configuration. Later connections must use that same person. Use the developer who owns the Service App: the identity pin does not prove ownership by itself, and the application-token endpoint also enforces Webex's authorization rules. Migrated installations retain their existing identity pin. Replacing Service App or provider Integration credentials clears the pin and saved provider tokens; all customer organizations must first be disconnected.
 
-The provider administrator signs into the sample locally and selects **Connect provider Integration**. Authorize with the owning developer account. The server exchanges the OAuth code, checks `/people/me`, and encrypts the returned provider token pair. It refreshes the pair on demand when retrieving Service App credentials.
+In the **Provider** experience, select **Connect provider Integration**. Authorize with the owning developer account. The server exchanges the OAuth code, checks `/people/me`, and encrypts the returned provider token pair. It refreshes the pair on demand when retrieving Service App credentials.
 
 ## 3. Register a separate customer identity Integration
 
@@ -40,17 +40,17 @@ Use the exact customer redirect URI shown in the setup screen (`http://localhost
 
 The callback reads `/people/me`, requires a human account, derives its `orgId`, and checks the person's role IDs against the **Full Administrator** role returned by `/roles`. Merely being able to enumerate roles is not accepted as proof. Missing role data or insufficient permission fails closed. In the October 26, 2026 sandbox run, `spark:people_read` plus `spark-admin:roles_read` returned the role catalog but omitted the person's assigned roles. Adding `spark-admin:people_read` returned those assignments and allowed verification. Include the admin people-read scope in both the registration and OAuth request; existing installations must authorize the added permission. Do not relax the check to organization membership if role data is absent.
 
-This is an OAuth API-authorization flow, not an OpenID Connect ID-token flow. It verifies a Webex identity for a user who is **already authenticated to the provider account**. No email-domain matching or account merging occurs.
+This is an OAuth API-authorization flow, not an OpenID Connect ID-token flow. It verifies a Webex identity for the selected customer workspace. Local perspective selection simulates the provider account; a hosted application must authenticate its own customer before starting this flow. No email-domain matching or account merging occurs.
 
 ## 4. Configure and start live mode
 
-Run `npm ci --ignore-scripts` once, then `npm start`. No environment configuration is required. On a fresh installation, open the private first-run setup link printed in the terminal, create the provider account, and choose which Webex registrations you already have. Save complete registration details as you obtain them; blank secret fields retain saved values. The provider UI can also create separate local sample customer accounts.
+Run `npm ci --ignore-scripts` once, then `npm start`. No environment configuration is required. Open `http://localhost:3000` directly in the provider workspace, without a local login, and choose which Webex registrations you already have. Save complete registration details as you obtain them; blank secret fields retain saved values. Use **Experience** in the sidebar to switch to a customer workspace. Webex OAuth and organization-link confirmation remain required.
 
-If a legacy `.env` sets `MODE=demo`, use `npm start -- --live` to select live mode without editing environment settings. Without a legacy mode setting, `npm start` defaults to live; `npm start -- --demo` selects the separate demo database. Existing local accounts remain usable. Legacy credentials are imported encrypted and the original encryption key is preserved in `.data/master.key`.
+If a legacy `.env` sets `MODE=demo`, use `npm start -- --live` to select live mode without editing environment settings. Without a legacy mode setting, `npm start` defaults to live; `npm start -- --demo` selects the separate demo database. Existing local settings and connections are preserved. Legacy credentials are imported encrypted and the original encryption key is preserved in `.data/master.key`.
 
 The default origin is `http://localhost:3000`. For an HTTPS tunnel/public origin you control, use `npm start -- --origin https://sample.example.com`. Preserve that Host header at the proxy and register both Integrations' exact callback URLs. `--port 3001` changes the local listener. HTTPS origins use Secure cookies; loopback HTTP is the sole development exception. No arbitrary API base URL or disabled TLS verification is supported.
 
-Use separate browser contexts for provider and customer accounts. For this pre-App Hub test, the Webex developer and customer administrator must belong to the developer organization; they may be different Webex people within it.
+Use the **Experience** selector, or separate browser contexts for simultaneous provider and customer views. A public HTTPS origin retains password-protected accounts and disables local perspective selection. For this pre-App Hub test, the Webex developer and customer administrator must belong to the developer organization; they may be different Webex people within it.
 
 After provider OAuth and Control Hub approval:
 

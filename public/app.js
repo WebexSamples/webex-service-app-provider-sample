@@ -128,7 +128,7 @@ function providerSettings() {
   return el('section', { class: 'panel' }, heading, form);
 }
 function customerAccounts() {
-  if (!state.providerSetup?.managed) return null;
+  if (session.localAccess || !state.providerSetup?.managed) return null;
   const pending = state.tenants.filter(t => !state.providerSetup.customerAccounts.includes(t.id));
   if (!pending.length) return null;
   return el('section', { class: 'panel' }, text('p', 'eyebrow', 'LOCAL CUSTOMER ACCESS'), text('h2', '', 'Create a sample customer sign-in'),
@@ -292,8 +292,15 @@ function render() {
       el('nav', { 'aria-label': isProvider ? 'Provider navigation' : 'Customer navigation' },
         el('a', { class: 'nav-active', href: '#main', 'aria-current': 'page' }, isProvider ? 'Customer connections' : 'Webex organization')),
       el('div', { class: 'sidebar-note' }, text('strong', '', 'Customer-initiated onboarding'), text('p', '', 'Verify identity, review the organization, and confirm the account link.')),
-      el('div', { class: 'account' }, text('strong', '', session.account.name), text('small', '', session.account.email),
-        button('Sign out', async () => { await api('/api/logout', {}); people = []; notice = ''; }, true))),
+      el('div', { class: `account${session.localAccess ? ' local-workspace' : ''}` }, text('strong', '', session.account.name),
+        session.localAccess ? el('div', { class: 'form-field' }, el('label', { for: 'perspective' }, 'Experience'),
+          el('select', { id: 'perspective', disabled: busy, onChange: event => {
+            const perspective = event.target.value;
+            run(async () => { await api('/api/local/perspective', { perspective }); people = []; hasMore = false; settingsOpen = false; });
+          } }, session.perspectives.map(p => el('option', { value: p.id,
+            selected: p.id === (session.account.tenantId || 'provider') }, p.name))),
+          text('small', '', 'Local workspace · no app login'))
+          : [text('small', '', session.account.email), button('Sign out', async () => { await api('/api/logout', {}); people = []; notice = ''; }, true)])),
     el('main', { id: 'main', class: 'workspace', 'aria-busy': busy }, banner(),
       el('header', { class: 'page-heading' }, el('div', {}, text('p', 'eyebrow', 'SERVICE APP STUDIO'), text('h1', '', isProvider ? 'Customer connections' : 'Your Webex organization')),
         button('Refresh status', async () => { people = []; hasMore = false; }, true)), message(),

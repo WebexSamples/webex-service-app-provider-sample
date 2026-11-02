@@ -5,7 +5,8 @@ This is a single-process, loopback-bound developer sample. Use controlled accoun
 Implemented protections:
 
 - Separate local provider/customer roles and server-derived tenant ownership on every protected action. The provider console receives connection metadata, not customer directory contents or credential values.
-- Generated opaque sessions, rotation at sign-in, HttpOnly SameSite=Lax cookies, server-side idle/absolute expiry, CSRF tokens, Origin checks, and fixed Host validation. Secure cookies are enabled for HTTPS; localhost HTTP is the sole development exception.
+- Password-free localhost workspaces with an explicit provider/customer selector. This trusts the local OS user, not the selected perspective as an authenticated customer identity. The launcher enables it only for loopback origins; the app also checks the socket address. Public HTTPS origins retain account login and cannot enable the selector.
+- Generated opaque sessions, rotation at sign-in or perspective change, HttpOnly SameSite=Lax cookies, server-side idle/absolute expiry, CSRF tokens, Origin checks, and fixed Host validation. Secure cookies are enabled for HTTPS; localhost HTTP is the sole development exception.
 - Fixed Webex API origin, HTTPS certificate validation, bounded request bodies and outbound timeouts, rejected redirects, and checked pagination targets. No caller-controlled API base URL.
 - Webex person/organization identity from `/people/me`, checked Full Administrator authority, session-bound one-use OAuth state, five-minute pending identity proofs, and explicit confirmation before token retrieval.
 - Unique canonical organization claims, connection revisions, and in-process guards against concurrent linking. A single process is required; do not scale this session/locking model across workers.
@@ -17,8 +18,10 @@ Implemented protections:
 
 Known boundaries:
 
+- Anyone with access to the localhost app can select any sample perspective and use its saved connections. Do not expose this loopback-origin workspace through a proxy that preserves the localhost Host header. Configure a public HTTPS origin to keep local account authentication. Perspective changes discard session-bound OAuth attempts, identity proofs, and directory cursors; they do not unlink an organization or delete its encrypted credentials.
+
 - Registration credentials are encrypted in SQLite; `.data/master.key` is a `0600` local key file in a `0700` directory. An attacker running as the same OS user can read that key and decrypt the database. This is local protection, not a managed vault. Legacy `.env` files remain untouched for migration; remove their plaintext copy after verifying migration and backing up the key. Move secrets into a managed vault, plan key rotation/backups, and restrict operating-system access before hosting real customer data.
-- The first provider account requires a one-use setup code printed only in the server terminal, plus session/Origin/CSRF checks. The code is removed from browser history after loading. Account creation then requires a provider session. Invitations, password reset, MFA, account lifecycle, delegated connection authority, persistent/distributed sessions, and a production reverse-proxy trust model are outside this sample.
+- On public HTTPS origins, the first provider account requires a one-use setup code printed only in the server terminal, plus session/Origin/CSRF checks. The code is removed from browser history after loading. Account creation then requires a provider session. Invitations, password reset, MFA, account lifecycle, delegated connection authority, persistent/distributed sessions, and a production reverse-proxy trust model are outside this sample.
 - Webex Full Admin verification is intentionally strict and fails closed. It requires live validation of role visibility under the configured customer Integration scopes.
 - Directory data is read-only and not stored in SQLite, but authorized customer browsers receive names/emails. Do not capture real customer data in shared screenshots or logs.
 - A directory read can fail due to revoked consent, missing scope, or invalid credentials. HTTP 401/403 disables the connection conservatively; an operator must resolve the cause and reconnect.

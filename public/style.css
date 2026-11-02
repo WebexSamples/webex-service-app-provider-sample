@@ -69,6 +69,7 @@ footer { padding-top: 8px; }
 .sidebar-note { margin: 40px 12px 32px; padding-top: 24px; border-top: 1px solid var(--line); font-size: .85rem; }
 .sidebar-note p { color: var(--muted); margin: 10px 0 0; }
 .account { margin-top: auto; border-top: 1px solid var(--line); padding: 24px 12px 0; font-size: .8rem; overflow-wrap: anywhere; }
+.account.local-workspace { margin-top: 0; }
 .account small { color: var(--muted); margin-top: 5px; }
 .account .button { margin-top: 18px; }
 .workspace { width: 100%; max-width: 1600px; min-width: 0; padding: 24px clamp(24px, 3.5vw, 56px) 40px; }

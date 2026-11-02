@@ -57,6 +57,65 @@ async function connect(client, orgId = 'demo-summit') {
   assert.equal((await client.request('/api/demo/verify', { orgId, authority: 'admin' })).status, 200);
   return client.request('/api/connect', { orgId, confirm: true });
 }
+test('local workspaces need no account and switch with session rotation and tenant isolation', async t => {
+  const f = await fixture(t, 'demo', undefined, { empty: true, localAccess: true, managedConfiguration: true });
+  const client = f.client();
+  let session = (await client.request('/api/session')).data;
+  assert.equal(session.setupRequired, false);
+  assert.equal(session.account.role, 'provider');
+  assert.deepEqual(session.perspectives.map(p => p.id), ['provider', 'northstar', 'summit']);
+  assert.equal(f.store.get('SELECT count(*) AS n FROM accounts').n, 0);
+  await client.request('/api/demo/provider', {});
+  await client.request('/api/demo/authorization', { orgId: 'demo-summit', authorized: true });
+  assert.equal((await client.request('/api/local/perspective', { perspective: 'summit' }, { Origin: 'https://evil.example' })).status, 403);
+  assert.equal((await client.request('/api/local/perspective', { perspective: 'unknown' })).status, 400);
+  assert.equal((await client.request('/api/local/perspective', { perspective: 'summit', role: 'provider' })).status, 400);
+  const previous = session.csrf;
+  const switched = await client.request('/api/local/perspective', { perspective: 'summit' });
+  assert.equal(switched.status, 200);
+  assert.ok(switched.headers.get('set-cookie'));
+  assert.equal((await client.request('/api/state')).data.tenants[0].id, 'summit');
+  assert.equal((await client.request('/api/demo/provider', {})).status, 403, 'Old CSRF token must fail');
+  session = (await client.request('/api/session')).data;
+  assert.notEqual(session.csrf, previous);
+  assert.equal((await client.request('/api/provider/settings', {})).status, 403);
+  assert.equal((await client.request('/api/connect', { orgId: 'demo-summit', confirm: true })).status, 409, 'Perspective selection is not Webex proof');
+  assert.equal((await connect(client)).status, 200);
+  await client.request('/api/demo/verify', { orgId: 'demo-summit', authority: 'admin' });
+  await client.request('/api/local/perspective', { perspective: 'northstar' });
+  await client.request('/api/session');
+  const northstar = (await client.request('/api/state')).data;
+  assert.equal(northstar.tenants.length, 1);
+  assert.equal(northstar.tenants[0].id, 'northstar');
+  assert.equal(northstar.proof, null);
+  assert.equal((await client.request('/api/directory', {})).status, 409);
+  assert.equal((await connect(client)).data.code, 'claim_conflict');
+  await client.request('/api/local/perspective', { perspective: 'summit' });
+  await client.request('/api/session');
+  assert.equal((await client.request('/api/state')).data.proof, null);
+  assert.equal((await client.request('/api/directory', {})).status, 200);
+  for (const path of ['/api/login', '/api/setup', '/api/logout', '/api/provider/customer']) {
+    assert.equal((await client.request(path, {})).status, 404);
+  }
+});
+test('public origins cannot enable local access and authenticated mode has no perspective switch', async t => {
+  const f = await fixture(t);
+  assert.equal((await f.provider.request('/api/session')).data.localAccess, false);
+  assert.equal((await f.provider.request('/api/local/perspective', { perspective: 'summit' })).status, 404);
+  assert.throws(() => createApp({ ...f.config, BASE_URL: 'https://sample.example' }, f.store, { localAccess: true }), /loopback origin/);
+});
+test('switching local perspectives invalidates pending Webex OAuth', async t => {
+  const f = await fixture(t, 'live', { exchange() { throw new Error('Must not exchange stale OAuth'); } },
+    { empty: true, localAccess: true, managedConfiguration: true });
+  const client = f.client(); await client.request('/api/session');
+  await client.request('/api/local/perspective', { perspective: 'summit' });
+  await client.request('/api/session');
+  const started = await client.request('/api/oauth/customer', {});
+  const state = new URL(started.data.url).searchParams.get('state');
+  await client.request('/api/local/perspective', { perspective: 'northstar' });
+  await client.request('/api/session');
+  assert.equal((await client.request(`/oauth/customer/callback?state=${encodeURIComponent(state)}&code=fixture`)).status, 403);
+});
 test('Momentum assets are served locally without exposing package files or relaxing CSP', async t => {
   const f = await fixture(t);
   for (const [path, type] of [['/vendor/momentum.js', 'text/javascript'], ['/vendor/theme.css', 'text/css'],

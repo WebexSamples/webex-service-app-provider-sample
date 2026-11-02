@@ -30,6 +30,14 @@ The Chromium smoke launched the real server with only `PATH` in its environment,
 
 For the existing local sandbox installation, migration read-back verified that the generated private key file retained the original encryption key, imported registration fields matched the legacy configuration, and existing encrypted provider/Service App token records remained readable. No credential values or customer data were captured. This was a local storage migration check, not a new live Webex API or authorization test.
 
+## Password-free local workspaces — November 2, 2026
+
+On localhost, startup now opens the provider workspace without account creation or login. The **Experience** selector switches to either sample customer; this simulates the provider account context and does not replace Webex administrator verification or explicit organization-link confirmation. Existing accounts and encrypted settings are preserved. Public HTTPS origins retain the original account flow.
+
+JavaScript checks and all 33 Node tests passed. New HTTP coverage checks account-free startup, session/CSRF rotation on perspective changes, invalid selections, cross-origin rejection, server-derived customer isolation, pending proof/OAuth invalidation, preserved directory access after switching back, and rejection of local access on public origins. Existing authenticated-mode tests still cover password login and first-run setup.
+
+The isolated Chromium walkthrough used password-free provider/customer contexts for the full fixture flow: member denial, explicit linking, pagination, duplicate-organization denial, Data Source register/read/renew/remove, reload persistence, disconnect/reconnect, and deauthorization. Fresh installation and restart without environment configuration restored encrypted registration settings without asking for a password. Desktop and 320px/390px screenshots were inspected and refreshed. The existing local installation also opened directly and switched perspectives without changing saved Webex registrations. No new Webex OAuth grant, live Data Source operation, or external deployment was performed for this change.
+
 ## Data Source example — October 31, 2026
 
 JavaScript syntax checks and 30 Node tests passed. Added contracts cover the fixed-origin Data Source POST/GET/PUT/DELETE paths, Service App bearer context, complete renewal payload, 204 deletion, already-removed 404 handling, and sanitized Data Source scope denials. Registration writes are not retried automatically after an ambiguous response. Setup validation rejects incomplete schema/URL pairs and endpoint credentials, query strings, fragments, local/IP destinations, and non-default ports.

@@ -9,7 +9,7 @@ This example demonstrates a provider registering a customer-specific endpoint af
 3. Under **Customer Data Source**, expand **Register a data source**. Review the fixture endpoint and schema, then select **Confirm register data source**.
 4. Select **Refresh data source** to read its last reported registration status.
 5. Select **Renew delivery token** to exercise a full update with a fresh nonce. The UI shows an estimated renewal deadline, not the token.
-6. Sign out and back in: the saved registration remains available. A separate customer's registration uses a different endpoint path and local record.
+6. Switch experiences and back: the saved registration remains available. A separate customer's registration uses a different endpoint path and local record.
 7. Expand **Remove data source** and select **Confirm remove data source**. The registration is removed while the organization link and directory access remain active.
 
 Demo mode uses a published BYOVA schema ID only as a fixture value. It makes no Webex calls and does not establish that a live Service App is approved for that schema.

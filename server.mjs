@@ -18,8 +18,9 @@ const directory = resolve(values['data-dir'] || '.data');
 const config = { ...process.env, MODE: mode, BASE_URL: values.origin || process.env.BASE_URL || `http://localhost:${port}`,
   ENCRYPTION_KEY: localKey(directory, process.env.ENCRYPTION_KEY) };
 const store = openStore(resolve(process.env.DATA_PATH || `${directory}/${mode}.sqlite`));
-const setupToken = store.get('SELECT id FROM accounts LIMIT 1') ? null : random();
-const app = createApp(config, store, { managedConfiguration: true, setupToken });
+const localAccess = ['localhost', '127.0.0.1'].includes(new URL(config.BASE_URL).hostname);
+const setupToken = localAccess || store.get('SELECT id FROM accounts LIMIT 1') ? null : random();
+const app = createApp(config, store, { managedConfiguration: true, setupToken, localAccess });
 const server = createServer({ maxHeaderSize: 16384, requestTimeout: 20000, headersTimeout: 15000 }, app.handler);
 server.listen(port, '127.0.0.1', () => {
   console.log(`Service App provider sample: ${config.BASE_URL} (${mode} mode)`);

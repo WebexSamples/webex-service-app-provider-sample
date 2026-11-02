@@ -20,20 +20,17 @@ def first_run_smoke(browser):
             port = listener.getsockname()[1]
         command = ["node", "server.mjs", "--port", str(port), "--data-dir", directory]
         environment = {"PATH": os.environ["PATH"]}
-        password, client_secret = secrets.token_urlsafe(24), secrets.token_urlsafe(24)
+        client_secret = secrets.token_urlsafe(24)
         server = None
         context = browser.new_context(viewport={"width": 1440, "height": 1100})
         try:
             server = subprocess.Popen(command, cwd=ROOT, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             assert "live mode" in server.stdout.readline(), "No-environment server did not start"
-            private_link = server.stdout.readline().strip().split(": ", 1)[1]
             page = context.new_page()
-            page.goto(private_link)
-            expect(page.get_by_role("heading", name="Set up your provider account")).to_be_visible()
-            assert "#setup=" not in page.url, "Setup code remained in browser history"
-            page.get_by_label("Email address", exact=True).fill("owner@example.test")
-            page.get_by_label("Password", exact=True).fill(password)
-            page.get_by_role("button", name="Create provider account", exact=True).click()
+            page.goto(f"http://localhost:{port}")
+            expect(page.get_by_label("Experience", exact=True)).to_have_value("provider")
+            expect(page.get_by_label("Password", exact=True)).to_have_count(0)
+            expect(page.get_by_role("button", name="Sign out", exact=True)).to_have_count(0)
             expect(page.get_by_role("heading", name="Webex registrations", exact=True)).to_be_visible()
             for choice in ["Service App only", "Integration only", "Service App and Integration", "Neither yet"]:
                 page.get_by_role("radio", name=choice, exact=True).check()
@@ -55,10 +52,18 @@ def first_run_smoke(browser):
                 page.get_by_label(label, exact=True).fill(value)
             page.get_by_role("button", name="Save available registrations", exact=True).click()
             expect(page.get_by_role("status")).to_contain_text("saved securely")
-            page.get_by_label("Customer email address", exact=True).fill("customer@example.test")
-            page.get_by_label("Customer password", exact=True).fill(password)
-            page.get_by_role("button", name="Create customer sign-in", exact=True).click()
-            expect(page.get_by_role("status")).to_contain_text("Customer sign-in created")
+            page.get_by_label("Experience", exact=True).select_option("summit")
+            expect(page.get_by_role("heading", name="Your Webex organization", exact=True)).to_be_visible()
+            expect(page.get_by_role("button", name="Verify with Webex →", exact=True)).to_be_visible()
+            page.reload()
+            expect(page.get_by_label("Experience", exact=True)).to_have_value("summit")
+            page.get_by_label("Experience", exact=True).select_option("northstar")
+            expect(page.get_by_label("Experience", exact=True)).to_have_value("northstar")
+            expect(page.get_by_text("Northstar Travel", exact=True).first).to_be_visible()
+            for width in [320, 390]:
+                page.set_viewport_size({"width": width, "height": 844})
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "Experience selector overflows on mobile"
+            page.screenshot(path=str(ARTIFACTS / "local-customer-mobile.png"), full_page=True)
             assert client_secret.encode() not in Path(directory, "live.sqlite").read_bytes(), "Registration secret stored in plaintext"
             assert Path(directory, "master.key").stat().st_mode & 0o777 == 0o600
             context.close()
@@ -69,10 +74,8 @@ def first_run_smoke(browser):
             context = browser.new_context(viewport={"width": 1440, "height": 1100})
             page = context.new_page()
             page.goto(f"http://localhost:{port}")
-            expect(page.get_by_role("heading", name="Welcome back", exact=True)).to_be_visible()
-            page.get_by_label("Email address", exact=True).fill("owner@example.test")
-            page.get_by_label("Password", exact=True).fill(password)
-            page.get_by_label("Password", exact=True).press("Enter")
+            expect(page.get_by_label("Experience", exact=True)).to_have_value("provider")
+            page.screenshot(path=str(ARTIFACTS / "local-provider.png"))
             page.get_by_role("button", name="Edit registration details", exact=True).click()
             expect(page.get_by_label("Service App ID", exact=True)).to_have_value("sample-service-app")
             expect(page.get_by_label("Data Source endpoint base URL", exact=True)).to_have_value("https://connector.example.com")
@@ -92,10 +95,8 @@ def first_run_smoke(browser):
 def main():
     ARTIFACTS.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="service-app-browser-") as temporary:
-        password = secrets.token_urlsafe(24)
         environment = {
             **os.environ,
-            "BROWSER_TEST_PASSWORD": password,
             "DATA_PATH": str(Path(temporary) / "fixture.sqlite"),
         }
         server = subprocess.Popen(
@@ -126,31 +127,21 @@ def main():
                     page.screenshot(path=str(ARTIFACTS / f"{name}-mobile.png"), full_page=True)
                     page.set_viewport_size({"width": 1440, "height": 1100})
 
-                def login(email):
+                def workspace(perspective):
                     context = browser.new_context(viewport={"width": 1440, "height": 1100})
                     page = context.new_page()
                     observe(page)
                     page.goto(base_url)
                     page.wait_for_load_state("networkidle")
-                    page.get_by_label("Email address").fill(email)
-                    page.get_by_label("Password", exact=True).fill(password)
-                    page.get_by_label("Password", exact=True).press("Enter")
-                    expect(page.get_by_role("button", name="Sign out", exact=True)).to_be_visible()
+                    expect(page.get_by_label("Experience", exact=True)).to_have_value("provider")
+                    expect(page.get_by_label("Experience", exact=True)).to_be_in_viewport()
+                    expect(page.get_by_label("Password", exact=True)).to_have_count(0)
+                    if perspective != "provider":
+                        page.get_by_label("Experience", exact=True).select_option(perspective)
+                        expect(page.get_by_role("heading", name="Your Webex organization", exact=True)).to_be_visible()
                     return context, page
 
-                # Inspect the rendered login page before operating the authenticated views.
-                landing = browser.new_page(viewport={"width": 1440, "height": 1000})
-                observe(landing)
-                landing.goto(base_url)
-                landing.wait_for_load_state("networkidle")
-                expect(landing.get_by_role("heading", name="Welcome back")).to_be_visible()
-                landing.screenshot(path=str(ARTIFACTS / "login.png"), full_page=True)
-                check_mobile(landing, "login")
-                landing.get_by_role("button", name="Sign in →", exact=True).click()
-                assert landing.get_by_label("Email address").evaluate("input => !input.validity.valid"), "Native form validation missing"
-                landing.close()
-
-                provider_context, provider = login("provider@example.test")
+                provider_context, provider = workspace("provider")
                 assert provider.evaluate("customElements.get('mdc-button') && document.querySelector('mdc-button').shadowRoot"), "Momentum buttons did not hydrate"
                 provider.evaluate("document.fonts.ready")
                 assert provider.evaluate("document.fonts.check('15px Momentum')"), "Local Momentum font did not load"
@@ -159,7 +150,7 @@ def main():
                 provider.get_by_role("button", name="Authorize Summit Outfitters Webex", exact=True).press("Space")
                 expect(provider.get_by_role("button", name="Deauthorize Summit Outfitters Webex", exact=True)).to_be_visible()
 
-                customer_context, customer = login("summit@example.test")
+                customer_context, customer = workspace("summit")
                 customer.get_by_label("Fixture authority").select_option("member")
                 customer.get_by_role("button", name="Verify fixture identity", exact=True).click()
                 expect(customer.get_by_role("alert")).to_contain_text("Full Administrator")
@@ -193,7 +184,7 @@ def main():
                 customer.reload()
                 expect(source.get_by_text("active", exact=True)).to_be_visible()
 
-                other_context, other = login("northstar@example.test")
+                other_context, other = workspace("northstar")
                 other.get_by_label("Fixture organization").select_option("demo-summit")
                 other.get_by_role("button", name="Verify fixture identity", exact=True).click()
                 other.get_by_role("button", name="Confirm link and activate Service App", exact=True).click()
@@ -239,7 +230,7 @@ def main():
                 for context in [provider_context, customer_context, other_context]:
                     context.close()
                 browser.close()
-            print("Browser smoke passed: no-env setup/restart, encrypted credentials, Momentum controls, explicit linking, pagination, claim conflict, Data Source register/read/renew/remove and reload persistence, disconnect/reconnect, deauthorization, and 320/390px layouts.")
+            print("Browser smoke passed: password-free local perspectives, no-env setup/restart, encrypted credentials, Momentum controls, explicit linking, pagination, claim conflict, Data Source register/read/renew/remove and reload persistence, disconnect/reconnect, deauthorization, and 320/390px layouts.")
             print("Fixture-only screenshots: artifacts/")
         finally:
             server.terminate()
