@@ -1,30 +1,21 @@
-# After App Hub submission and approval
+# After App Hub submission
 
-The local sample does not reproduce App Hub discovery, review, approval, listing, or external-customer authorization. Demo identities and approvals are fixtures. Live own-org testing proves only the exercised organization and API paths.
+Service App Studio currently validates local developer maintenance: configure one app, inspect approved organizations, and get their tokens. It no longer implements customer onboarding, directory reads, or Data Sources.
 
-## Changes needed
+Before publication, exercise the real Service App inside its developer organization. App Hub approval and an external customer's Control Hub approval remain separate prerequisites; a successful own-org test proves neither.
 
-1. **Submit the existing Service App.** Complete App Hub review, requested scopes, branding, support/privacy information, and reproducible reviewer instructions. Record the exact Service App identity. Do not assume submission alone makes it available to external customers.
-2. **Replace own-org setup instructions.** Direct external customers to the approved Service App listing/Control Hub entry. Remove the developer-org visibility step from the customer journey.
-3. **Configure the deployed origins.** Register exact HTTPS callbacks on both Integrations and the webhook target. Move client secrets and the encryption key into managed secret storage; put the app behind a production HTTPS service.
-4. **Authenticate hosted customers.** The localhost selector simulates the provider/customer account context. A hosted provider must establish tenant membership with its own authentication before Webex verification; do not expose local perspective selection. The sample retains its account login when configured with a public HTTPS origin.
-5. **Confirm organization policy.** Standard OAuth Integrations and Service Apps have different authorization/visibility paths. Integration consent remains subject to the customer's Control Hub policy. Do not infer that listing a Service App automatically permits the separate customer Integration.
-6. **Repeat live acceptance with independent organizations.** Use the provider organization plus at least two genuinely separate customer Webex organizations and separate customer provider tenants.
+## Replace experimental PAT listing
 
-The organization-linking algorithm, separate OAuth contexts, Service App token endpoint, encrypted tenant-specific token storage, and directory API should remain the same. If real external-org testing reveals different API behavior, fix and test that behavior explicitly; do not add an App Hub toggle that bypasses verification.
+The Developer Portal reads `GET /v1/applications/{applicationId}` and displays `authorizationsList`. This is currently absent from the public Service Apps specification. Its accepted application-read scopes are also absent from the Integration editor. API documentation, scope catalog enablement, and a supported external contract must be resolved before replacing this sample's temporary PAT with production OAuth.
 
-If demonstrating [Data Sources](DATA_SOURCES.md), include the data exchange schema, receiver domain, and Data Source scopes in the App Hub submission. Validate registration, renewal, removal, and organization isolation separately for both external customers. Endpoint registration alone does not validate the receiver or its consuming Webex feature.
+That work is tracked separately from the sample implementation. Confirm the response schema, app-owner/reviewer permissions, empty-list semantics, pagination/completeness, rate limits, and revocation timing with the API owner. Do not assume a documentation PR alone enables a scope.
 
-## External-customer acceptance
+## Production acceptance
 
-- Customer A authorizes the exact listed Service App in its Control Hub; no provider tenant is linked automatically.
-- A local customer tenant administrator authenticates with Customer A's Webex Full Admin, confirms the link, and receives only Customer A's directory.
-- Customer B follows the same path independently and receives only Customer B's directory.
-- Customer B cannot claim A's existing organization link, supply A's organization ID manually, replay A's callback, or read A's saved credentials/directory.
-- A normal organization member and a user from the provider's Webex organization cannot activate another customer's link merely by knowing its ID.
-- Customer OAuth tokens can be discarded while Service App reads and refreshes continue.
-- Service App deauthorization stops access, invalidates local credentials, and never automatically reactivates on reauthorization.
-- Duplicate actions, interrupted verification, retries, expired tokens, missing scopes, and provider Integration reconnection remain safe.
-- Confirm webhook payload fields, signatures, authorization events, and deauthorization behavior in both external organizations.
+1. Verify supported scoped developer OAuth can list approvals and retrieve Service App tokens.
+2. Verify an external customer can discover and approve the submitted app, then appears in the provider's approval list.
+3. Retrieve and refresh a token for that exact organization. Confirm unrelated and revoked organizations are rejected.
+4. Exercise expiration, credential rotation, retries, concurrent requests, large authorization lists, and refresh-token rotation.
+5. For a hosted provider, add authenticated tenant ownership and explicit organization linking, isolated encrypted storage, managed keys, retention rules, and deployment controls. A PAT owner check in a local console does not establish customer account ownership.
 
-Do not describe these as passed until their actual live evidence is recorded in [validation](VALIDATION.md).
+The current console intentionally accepts only loopback HTTP. Do not host it unchanged. Existing old Integration registrations and remote approvals are not removed automatically.

@@ -1,3 +1,2 @@
-// Retained for older checkout instructions; first-run setup now lives in the web app.
-console.log('Run npm start, then open the private first-run setup link printed in the terminal.');
-console.log('For fictional demo data, run npm start -- --demo instead. No .env file is required.');
+console.log('Run npm start, then open http://localhost:3000. No .env file or app login is required.');
+console.log('For fictional demo organizations, run npm start -- --demo.');

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Customer-initiated Webex Service App organization linking and directory sample",
+  "description": "Local Webex Service App authorization and token console",
   "license": "MIT",
   "engines": {
     "node": ">=24.13.0 <25"

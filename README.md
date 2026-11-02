@@ -1,21 +1,12 @@
-# Webex Service App Provider Sample
+# Webex Service App Studio
 
-A small web app for validating **customer-initiated organization linking**. A customer approves a Service App in Webex, signs into their provider account, verifies their Webex administrator identity through a separate OAuth Integration, and explicitly confirms the organization link. Only then does the backend retrieve Service App tokens and read that organization's directory.
+A local console for maintaining a Webex Service App. Configure the app, see its approved organizations, and retrieve or refresh a token pair for a selected organization.
 
-Two experiences share one backend:
-
-- **Provider administrator:** configure developer connections, inspect customer connection metadata, and exercise simulated Control Hub approvals in demo mode. This role cannot view customer directories.
-- **Customer administrator:** verify a Webex account, confirm the organization link, read a paginated directory, manage an optional Data Source registration, and disconnect. This role sees only its own provider tenant.
-
-This is an independent sample, not an official onboarding requirement or a production SaaS platform. Webex API behavior is covered by mocked contract tests; live acceptance requires your own registered apps and organization. See [validation](docs/VALIDATION.md).
-
-![Customer experience with a connected fixture organization and read-only directory](docs/screenshots/customer-directory.png)
-
-The [provider console screenshot](docs/screenshots/provider-console.png) shows the separate administrative experience. Both screenshots use fictional demo data.
+![Service App Studio overview with fictional demo data](docs/screenshots/overview.png)
 
 ## Run locally
 
-Requires **Node.js 24.13 or later in the 24.x release line**. The server uses Node's built-in APIs; the browser uses locked Momentum Design components, theme tokens, and fonts served locally. Node's built-in SQLite module currently emits an experimental-feature warning.
+Requires **Node.js 24.13+ in the 24.x release line**.
 
 ```sh
 git clone https://github.com/WebexSamples/webex-service-app-provider-sample.git
@@ -24,68 +15,45 @@ npm ci --ignore-scripts
 npm start
 ```
 
-No environment variables, `.env` file, or local account are required. Open **http://localhost:3000** to enter the provider Overview. Use **Experience** in the sidebar to switch between **Provider**, **Summit Outfitters**, and **Northstar Travel**. These are local sample perspectives; Webex OAuth still verifies the developer/customer identity, and linking a customer organization still requires explicit confirmation.
+Open **http://localhost:3000**. No app login or environment variables are required. The app binds to loopback and rejects public origins and unexpected Host headers. Anyone with access to this local workspace can use its saved credentials.
 
-**Overview** explains the sample, the approval → verification → confirmation flow, and the directory/Data Source examples. Its status summary shows saved developer setup, connected customer counts, and the last successful directory read. The next-step link takes you to the first unfinished setup step, or to Customers when setup is complete. **Refresh status** reloads the sample’s stored state; it does not probe Webex or check receiver health.
+1. **Service App:** save its app ID, client ID, and client secret from [My Webex Apps](https://developer.webex.com/my-apps). Add its name and Manage URL if desired. After connecting developer access, the app name comes from Webex.
+2. **Developer Access:** paste the Service App creator's [personal access token](https://developer.webex.com/admin/docs/getting-started#your-personal-access-token) and select **Connect PAT**. The app verifies ownership and loads approvals.
+3. **Organizations:** inspect approved organizations. Expand **Manage tokens** and choose **Retrieve token pair**. Once a pair is saved, you can refresh it or reveal the saved pair. Each action rechecks approval in Webex.
 
-![Service App Studio overview with fixture status](docs/screenshots/overview.png)
+![Approved organizations and saved-token status using fictional data](docs/screenshots/organizations.png)
 
-**Developer Connections** contains three separate setup screens:
+Token values appear only after an explicit token action. Use the copy controls if needed, then **Hide tokens**. Navigation, errors, and a periodic five-minute clear remove them from the view. The clipboard is not automatically cleared. Ordinary status responses contain expiry metadata only.
 
-1. **Service App** — save its app ID and client credentials. Optional display details show the app's name and a **Manage** link. These details are saved locally, not synchronized from Webex.
-2. **Developer Integration** — save the owning developer's Integration credentials, then select **Connect Webex developer**.
-3. **Customer Verification** — configure the separate Integration used to verify each customer's Webex administrator.
+**Refresh approvals** reloads the organization list from Webex. Otherwise, the list is a saved snapshot with a last-checked timestamp. This console does not grant approvals; administrators manage them in Control Hub.
 
-Each sidebar item shows **Needs setup**, **Configured**, **Ready to connect**, or **Connected**. You can start with any registrations you already have; missing steps show their scopes, callback, and My Webex Apps link. Each screen saves only its own settings. Blank secret fields preserve saved credentials.
+## Temporary PAT access
 
-**Customers** is separate from setup. It lists linked organizations and, in demo mode, simulated Control Hub approvals. **Connection History** has the audit trail. Screens have direct fragment URLs such as `/#service-app`, `/#developer-integration`, and `/#customers`; reload and browser back/forward preserve the selected screen.
+Organization listing uses the Developer Portal's **experimental, unpublished** `GET /v1/applications/{applicationId}` response and its `authorizationsList`. The public API specification and Integration scope catalog do not currently expose this read path. API publication and scope enablement are separate work.
 
-![Service App setup with sidebar status indicators](docs/screenshots/provider-setup.png)
+The sample restricts listing to the app creator's PAT. A normal Integration with `spark:applications_token` alone cannot read this list. PATs are temporary testing credentials and are unsuitable for a production provider service. See [live setup](docs/LIVE_SETUP.md) and [App Hub transition](docs/APP_HUB_TRANSITION.md).
 
-![Developer Integration setup and account connection](docs/screenshots/developer-integration.png)
+The PAT stays only in server memory for the browser session. It is discarded on disconnect, settings changes, restart, or session expiry (30 minutes idle, eight hours absolute). It is never stored in SQLite, localStorage, or an environment file. An expired PAT must be replaced. Disconnecting a PAT does not revoke existing Service App tokens.
 
-Saved secrets are encrypted in the mode's SQLite database and never returned to the browser. The app generates `.data/master.key` with mode `0600` inside a `0700` directory. Back up that key separately from the databases; losing it makes saved credentials unreadable. Existing `.env` configuration is supported for migration: the app preserves its encryption key and imports the registration credentials into encrypted storage. After verifying the migration and backing up the key, you can remove the old `.env` file. New secrets are managed through the UI.
+## Saved credentials
 
-The selected experience belongs to the browser session. Use separate browser profiles for simultaneous provider/customer views; tabs in one profile share the selection. Switching clears pending Webex verification and directory results, while saved organization connections remain intact.
+The app generates `.data/master.key` with mode `0600` in a `0700` directory. Registration secrets, organization snapshots, and Service App token pairs are encrypted in `.data/live.sqlite` using AES-256-GCM. Token pairs are bound to the Service App ID, client ID, and organization ID. Blank secret fields preserve the saved secret; changing an ID requires supplying the matching secret.
 
-For fictional demo data, stop live mode and run:
+Back up the key separately from the database. Losing the key makes saved credentials unreadable. Existing installations keep their encrypted settings, legacy tables, and key. Old Integration credentials and customer connections are retained but unused. This version removes the customer-linking, directory, Data Source, and webhook workflows. It does not delete registrations or revoke grants in Webex.
+
+Legacy `.env` values can still be loaded by `npm start`, including the original encryption key. Save Service App settings in the UI to persist them locally. New installations need no `.env` file. Do not put a PAT in one.
+
+## Try fictional data
+
+Stop live mode, then run:
 
 ```sh
 npm start -- --demo
 ```
 
-Demo and live mode have separate databases. Both open without a local login. Demo mode doesn't require Webex registrations. Older installations keep their saved settings and connections. Use `npm start -- --live` to override a legacy demo-mode setting without editing `.env`.
+Connect **demo developer** under Developer Access. Open Organizations to retrieve a fictional Summit Outfitters token pair. Use **Simulated Control Hub** to approve or revoke fixture organizations, then refresh approvals. Revoked organizations cannot pass a new token action. Demo mode never calls Webex and uses a separate database.
 
-### Try the demo
-
-1. In the **Provider** experience, open **Developer Integration** and select **Connect demo Integration**.
-2. Open **Customers**. Under **Simulated Control Hub**, authorize the Summit Outfitters Webex fixture. Approval does not link or activate any tenant.
-3. Switch **Experience** to **Summit Outfitters**.
-4. Select the Summit fixture and **Full Administrator**, then **Verify fixture identity**. Choosing **Organization member** demonstrates the authority denial.
-5. Review the organization and provider account; select **Confirm link and activate Service App**.
-6. Select **Refresh directory**, then **Load more members**. These reads use the saved Service App connection, without retaining a customer OAuth token.
-7. Switch to **Northstar Travel** and try claiming the same Summit Webex fixture. The existing tenant claim blocks it.
-8. Switch to **Provider**, open **Customers**, and deauthorize the Summit fixture. Refresh the customer status: credentials have been removed and access is disconnected. Reauthorization alone does not reactivate it; verify and confirm again.
-
-The permanent **DEMO MODE** banner identifies fixture data. Demo mode makes no Webex requests, and demo mutation endpoints are disabled in live mode. The fixture authority selector is intentionally a simulation, not an authentication mechanism.
-
-### Try the Data Source example
-
-After linking a demo customer, open **Register a data source** under **Customer Data Source**, review its customer-specific endpoint, and select **Confirm register data source**. Then refresh its status, renew its delivery token, or expand **Remove data source** and confirm removal. Directory access remains connected after removal.
-
-Demo registrations are persisted fixtures. Live mode uses the Webex Data Sources API with the customer's Service App token. The provider configures the approved schema and endpoint in the existing setup screen; no new environment variables are needed. See [Data Source setup and boundaries](docs/DATA_SOURCES.md).
-
-![Customer Data Source registration with fictional demo data](docs/screenshots/customer-data-source.png)
-
-To unlink a customer, expand **Disconnect organization**, review the effect, and select **Confirm disconnect**. Opening the disclosure leaves the connection active. Control Hub authorization is managed separately.
-
-## Use real Webex apps
-
-Follow [live setup](docs/LIVE_SETUP.md). It describes the Service App, the two separate OAuth Integration registrations, scopes, callback URLs, and optional signed lifecycle webhooks.
-
-Before App Hub approval, validate real APIs inside the Service App developer's organization. The provider and customer **workspaces** remain separate; this does not establish external-organization availability. [App Hub transition](docs/APP_HUB_TRANSITION.md) lists the remaining changes and acceptance tests.
-
-The app binds to loopback. Password-free perspective selection is available only with a loopback origin. Anyone who can access that local workspace can use its saved connections. A public HTTPS origin retains separate password-protected provider/customer accounts and first-run setup; no perspective-switch endpoint is enabled there. An HTTPS tunnel or reverse proxy can expose it for OAuth callbacks and webhooks; start with `npm start -- --origin https://sample.example.com`, preserve that public Host header, and keep the server bound to loopback. Use `--port 3001` to change the local listener. This is not authorization to deploy the sample or create Webex apps automatically.
+Use `npm start -- --live` to override a legacy demo setting. To change the port, use `npm start -- --port 3001`.
 
 ## Checks
 
@@ -94,25 +62,24 @@ npm run check
 npm test
 ```
 
-`npm test` covers real HTTP sessions, CSRF, role restrictions, explicit consent, conflicting tenant claims, disconnect/recovery, signed deauthorization, OAuth state, token contexts, encryption, and Webex request/response contracts. No Webex credentials or GitHub credentials are needed.
+The tests cover local sessions, CSRF and origin checks, owner verification, approval changes, encrypted token contexts, refresh handling, concurrency, and legacy-data preservation. No Webex credentials are needed. Optional browser checks require Python Playwright with Chromium:
 
-For browser smoke tests, install Python Playwright and its Chromium browser in a development environment, then run `python3 scripts/browser_smoke.py`. This is optional test tooling, not an application dependency. It launches an isolated fixture server and writes screenshots to ignored `artifacts/`.
+```sh
+python3 scripts/browser_smoke.py
+```
+
+The browser test starts isolated servers without reading `.env`, checks setup/restart and token actions, and verifies 320px and 390px layouts. Screenshots in `artifacts/` contain fixtures only. See [validation evidence](docs/VALIDATION.md).
 
 ## Implementation
 
 | Path | Purpose |
 | --- | --- |
-| `server.mjs` | Loopback HTTP server and startup |
-| `lib/config.mjs` | Private local key creation and registration-field allow-list |
-| `lib/app.mjs` | Sessions, permissions, OAuth, linking, directory, Data Sources, lifecycle events |
-| `lib/webex.mjs` | Fixed-origin Webex API calls and response validation |
-| `lib/security.mjs` | Password hashing, authenticated encryption, identity normalization |
+| `server.mjs` | Loopback server and startup |
+| `lib/config.mjs` | Private encryption key and Service App field validation |
+| `lib/app.mjs` | Local sessions, temporary PAT, approvals, token actions |
+| `lib/webex.mjs` | Fixed-origin Webex calls and response validation |
+| `lib/security.mjs` | Authenticated encryption and organization identity normalization |
 | `lib/store.mjs` | SQLite persistence and audit history |
-| `public/` | Browser UI with Momentum Design; no secrets or CDN requests |
-| `test/` | Node's built-in test runner |
+| `public/` | Momentum Design UI, served locally |
 
-Mode-specific databases live in `.data/demo.sqlite` and `.data/live.sqlite`. Sessions, pending OAuth states, and short-lived identity proofs live only in memory and expire; restarting opens the provider experience on localhost and requires fresh Webex verification for a new organization link. Public HTTPS origins require local-account sign-in again. Directory entries are returned to the customer's browser and are not persisted in SQLite. Tokens and registration credentials are encrypted with AES-256-GCM under separate authenticated contexts; the ignored `.data/master.key` holds the local encryption key. Back up the key separately from the database. Changing or losing the key makes saved credentials unreadable.
-
-Keep `.env`, `.data/`, runtime artifacts, and customer data out of Git. See [security boundaries](SECURITY.md), [contributing](CONTRIBUTING.md), and the [MIT license](LICENSE).
-
-The UI uses `@momentum-design/components` pinned to `0.137.2`, matching the Developer Portal Contributor Hub, with pinned theme/font packages in `package-lock.json`. The server exposes only the required asset paths, keeping the existing same-origin Content Security Policy. Native form controls preserve browser validation and keyboard access. Public-origin login fields retain password-manager support.
+The browser dependencies remain pinned in `package-lock.json`; no CDN requests are needed. Keep credentials, databases, customer data, and private artifacts out of Git. See [security](SECURITY.md), [contributing](CONTRIBUTING.md), and the [MIT license](LICENSE).
