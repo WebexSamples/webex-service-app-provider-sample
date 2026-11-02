@@ -31,36 +31,69 @@ def first_run_smoke(browser):
             expect(page.get_by_label("Experience", exact=True)).to_have_value("provider")
             expect(page.get_by_label("Password", exact=True)).to_have_count(0)
             expect(page.get_by_role("button", name="Sign out", exact=True)).to_have_count(0)
-            expect(page.get_by_role("heading", name="Webex registrations", exact=True)).to_be_visible()
-            for choice in ["Service App only", "Integration only", "Service App and Integration", "Neither yet"]:
-                page.get_by_role("radio", name=choice, exact=True).check()
-                expect(page.get_by_role("radio", name=choice, exact=True)).to_be_checked()
+            expect(page.get_by_role("heading", name="Developer Connections", exact=True)).to_be_visible()
+            expect(page.get_by_role("radio")).to_have_count(0)
+            nav = page.get_by_role("navigation", name="Provider navigation")
+            expect(nav.get_by_role("link", name="Service App Needs setup", exact=True)).to_be_visible()
+            expect(nav.get_by_role("link", name="Developer Integration Needs setup", exact=True)).to_be_visible()
+            expect(page.get_by_label("Developer Integration client ID", exact=True)).to_have_count(0)
+            expect(page.get_by_role("table")).to_have_count(0)
             for width in [320, 390]:
                 page.set_viewport_size({"width": width, "height": 844})
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "Provider setup overflows on mobile"
             page.screenshot(path=str(ARTIFACTS / "provider-setup-mobile.png"), full_page=True)
             page.set_viewport_size({"width": 1440, "height": 1100})
             page.screenshot(path=str(ARTIFACTS / "provider-setup.png"))
+            page.get_by_text("Optional Data Source and webhooks", exact=True).click()
             for label, value in [
                 ("Service App name (optional)", "Sample Directory Service App"),
                 ("Service App manage URL (optional)", "https://developer.webex.com/my-apps/sample-directory-service-app"),
                 ("Service App ID", "sample-service-app"), ("Service App client ID", "sample-service-client"),
-                ("Service App client secret", client_secret), ("Provider Integration client ID", "sample-provider-client"),
-                ("Provider Integration client secret", client_secret), ("Customer Integration client ID", "sample-customer-client"),
-                ("Customer Integration client secret", client_secret),
+                ("Service App client secret", client_secret),
                 ("Data Source schema ID", "5397013b-7920-4ffc-807c-e8a3e0a18f43"),
                 ("Data Source endpoint base URL", "https://connector.example.com"),
             ]:
                 page.get_by_label(label, exact=True).fill(value)
-            page.get_by_role("button", name="Save available registrations", exact=True).click()
-            expect(page.get_by_role("status")).to_contain_text("saved securely")
-            expect(page.locator(".config-grid")).to_contain_text("Sample Directory Service App")
+            page.get_by_role("button", name="Save Service App", exact=True).click()
+            expect(page.get_by_role("status")).to_contain_text("Service App saved securely")
+            expect(page.locator(".service-app-details")).to_contain_text("Sample Directory Service App")
+            expect(nav.get_by_role("link", name="Service App Configured", exact=True)).to_be_visible()
             expect(page.get_by_role("link", name="Manage Service App", exact=True)).to_have_attribute("href", "https://developer.webex.com/my-apps/sample-directory-service-app")
             for width in [320, 390]:
                 page.set_viewport_size({"width": width, "height": 844})
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "Service App details overflow on mobile"
             page.set_viewport_size({"width": 1440, "height": 1100})
-            page.locator(".config-grid").screenshot(path=str(ARTIFACTS / "service-app-details.png"))
+            page.locator(".service-app-details").screenshot(path=str(ARTIFACTS / "service-app-details.png"))
+            page.get_by_role("link", name="Continue to Developer Integration", exact=True).click()
+            expect(page.get_by_label("Service App client ID", exact=True)).to_have_count(0)
+            page.get_by_label("Developer Integration client ID", exact=True).fill("sample-provider-client")
+            page.get_by_label("Developer Integration client secret", exact=True).fill(client_secret)
+            expect(page.get_by_role("button", name="Connect Webex developer", exact=True)).to_be_disabled()
+            page.get_by_role("button", name="Save Developer Integration", exact=True).click()
+            expect(page.get_by_role("button", name="Connect Webex developer", exact=True)).to_be_enabled()
+            expect(nav.get_by_role("link", name="Developer Integration Ready to connect", exact=True)).to_be_visible()
+            page.screenshot(path=str(ARTIFACTS / "developer-integration.png"))
+            for width in [320, 390]:
+                page.set_viewport_size({"width": width, "height": 844})
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "Developer Integration overflows on mobile"
+            page.screenshot(path=str(ARTIFACTS / "developer-integration-mobile.png"), full_page=True)
+            page.set_viewport_size({"width": 1440, "height": 1100})
+            expect(page.get_by_role("link", name="Continue to Customer Verification", exact=True)).to_have_count(0)
+            nav.get_by_role("link", name="Customer Verification Needs setup", exact=True).click()
+            page.get_by_label("Customer Integration client ID", exact=True).fill("sample-customer-client")
+            page.get_by_label("Customer Integration client secret", exact=True).fill(client_secret)
+            page.get_by_role("button", name="Save Customer Verification", exact=True).click()
+            expect(nav.get_by_role("link", name="Customer Verification Configured", exact=True)).to_be_visible()
+            page.get_by_role("link", name="Open Customers", exact=True).click()
+            expect(page.get_by_role("heading", name="Customers", exact=True)).to_be_visible()
+            expect(page.get_by_role("table")).to_be_visible()
+            expect(page.get_by_label("Service App client ID", exact=True)).to_have_count(0)
+            page.reload()
+            expect(page.get_by_role("heading", name="Customers", exact=True)).to_be_visible()
+            nav.get_by_role("link", name="Connection History", exact=True).click()
+            expect(page.get_by_role("heading", name="Connection History", exact=True)).to_be_visible()
+            page.go_back()
+            expect(page.get_by_role("heading", name="Customers", exact=True)).to_be_visible()
             page.get_by_label("Experience", exact=True).select_option("summit")
             expect(page.get_by_role("heading", name="Your Webex organization", exact=True)).to_be_visible()
             expect(page.get_by_role("button", name="Verify with Webex →", exact=True)).to_be_visible()
@@ -85,7 +118,7 @@ def first_run_smoke(browser):
             page.goto(f"http://localhost:{port}")
             expect(page.get_by_label("Experience", exact=True)).to_have_value("provider")
             page.screenshot(path=str(ARTIFACTS / "local-provider.png"))
-            page.get_by_role("button", name="Edit registration details", exact=True).click()
+            page.get_by_role("button", name="Edit Service App", exact=True).click()
             expect(page.get_by_label("Service App ID", exact=True)).to_have_value("sample-service-app")
             expect(page.get_by_label("Service App name (optional)", exact=True)).to_have_value("Sample Directory Service App")
             expect(page.get_by_label("Service App manage URL (optional)", exact=True)).to_have_value("https://developer.webex.com/my-apps/sample-directory-service-app")
@@ -156,8 +189,12 @@ def main():
                 assert provider.evaluate("customElements.get('mdc-button') && document.querySelector('mdc-button').shadowRoot"), "Momentum buttons did not hydrate"
                 provider.evaluate("document.fonts.ready")
                 assert provider.evaluate("document.fonts.check('15px Momentum')"), "Local Momentum font did not load"
+                provider.get_by_role("navigation", name="Provider navigation").get_by_role("link", name="Developer Integration Ready to connect", exact=True).click()
                 provider.get_by_role("button", name="Connect demo Integration", exact=True).press("Enter")
                 expect(provider.get_by_text("Demo provider Integration connected.", exact=True)).to_be_visible()
+                expect(provider.get_by_role("link", name="Continue to Customer Verification", exact=True)).to_be_visible()
+                expect(provider.get_by_role("navigation", name="Provider navigation").get_by_role("link", name="Developer Integration Connected", exact=True)).to_be_visible()
+                provider.get_by_role("navigation", name="Provider navigation").get_by_role("link", name="Customers", exact=True).click()
                 provider.get_by_role("button", name="Authorize Summit Outfitters Webex", exact=True).press("Space")
                 expect(provider.get_by_role("button", name="Deauthorize Summit Outfitters Webex", exact=True)).to_be_visible()
 

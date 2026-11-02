@@ -44,6 +44,12 @@ The provider can save an optional Service App name and Developer Portal detail U
 
 JavaScript checks and 34 Node tests passed. New coverage checks persistence, provider-only access, unsafe URL rejection, unchanged provider/customer credentials during metadata updates, and clearing omitted metadata when replacing the Service App ID. The browser walkthrough checked the configured name/link, encrypted-settings restart, and 320px/390px layouts. The existing local installation was populated with the user-provided name and management URL; no new Webex API calls or access grants were needed.
 
+## Separate developer setup and customer connections — November 2, 2026
+
+The provider UI separates **Developer Connections** from **Customers** and **Connection History**. Service App, Developer Integration, and Customer Verification have individual screens, partial settings saves, and sidebar status indicators. The registration-choice radio selector and combined configuration dashboard were removed. Optional Data Source/webhook settings remain within Service App editing. Developer OAuth returns to its own screen; the next-step link appears after connecting the developer account.
+
+JavaScript checks and all 34 Node tests passed, including the developer OAuth return route. The isolated browser walkthrough saved each registration separately, checked status changes and disabled connection actions before configuration, confirmed that setup fields and the customer table are on different screens, and exercised direct navigation, reload, back, restart, and the existing fixture onboarding/Data Source lifecycle. Desktop and 320px/390px layouts were inspected. Existing local credentials and Webex access grants were not changed by this UI work; no new live Webex API verification was performed.
+
 ## Data Source example — October 31, 2026
 
 JavaScript syntax checks and 30 Node tests passed. Added contracts cover the fixed-origin Data Source POST/GET/PUT/DELETE paths, Service App bearer context, complete renewal payload, 204 deletion, already-removed 404 handling, and sanitized Data Source scope denials. Registration writes are not retried automatically after an ambiguous response. Setup validation rejects incomplete schema/URL pairs and endpoint credentials, query strings, fragments, local/IP destinations, and non-default ports.

@@ -228,7 +228,9 @@ test('live OAuth is session-bound, single-use, and persists no customer tokens',
   const stolen = await oauth(f.summit, 'customer');
   assert.equal((await f.northstar.request(stolen)).status, 403);
   const providerCallback = await oauth(f.provider, 'provider');
-  assert.equal((await f.provider.request(providerCallback)).status, 303);
+  const providerReturn = await f.provider.request(providerCallback);
+  assert.equal(providerReturn.status, 303);
+  assert.equal(new URL(providerReturn.headers.get('location'), f.config.BASE_URL).hash, '#developer-integration');
   const customerCallback = await oauth(f.summit, 'customer');
   assert.equal((await f.summit.request(customerCallback)).status, 303);
   assert.equal((await f.summit.request(customerCallback)).status, 403);

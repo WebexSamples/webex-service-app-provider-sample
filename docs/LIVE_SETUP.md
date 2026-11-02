@@ -11,7 +11,7 @@ In [My Webex Apps](https://developer.webex.com/my-apps), create a Service App un
 
 For the optional [Data Source example](DATA_SOURCES.md), also select `spark-admin:datasource_read` and `spark-admin:datasource_write`, plus a data exchange schema and your receiver's domain. Existing installations need a Full Administrator to reauthorize these changes; the separate provider/customer Integrations do not need additional scopes.
 
-Enter its application ID, client ID, and client secret in the provider’s **Webex registrations** screen. The application ID and OAuth client ID are different identifiers; do not substitute one for the other.
+Enter its application ID, client ID, and client secret in the provider’s **Developer Connections → Service App** screen. The application ID and OAuth client ID are different identifiers; do not substitute one for the other.
 
 For the own-org test, request admin authorization to make the app visible, then have a Full Admin authorize it under **Control Hub → Management → Apps → Service Apps**. Follow the [Service App guide](https://developer.webex.com/admin/docs/service-apps). External-customer availability is a separate [App Hub transition](APP_HUB_TRANSITION.md).
 
@@ -26,7 +26,7 @@ Use the exact provider redirect URI shown in the setup screen (`http://localhost
 
 The first successful provider OAuth connection pins the verified Webex developer identity in encrypted configuration. Later connections must use that same person. Use the developer who owns the Service App: the identity pin does not prove ownership by itself, and the application-token endpoint also enforces Webex's authorization rules. Migrated installations retain their existing identity pin. Replacing Service App or provider Integration credentials clears the pin and saved provider tokens; all customer organizations must first be disconnected.
 
-In the **Provider** experience, select **Connect provider Integration**. Authorize with the owning developer account. The server exchanges the OAuth code, checks `/people/me`, and encrypts the returned provider token pair. It refreshes the pair on demand when retrieving Service App credentials.
+In the **Provider** experience, open **Developer Integration**, save its credentials, and select **Connect Webex developer**. Authorize with the owning developer account. The server exchanges the OAuth code, checks `/people/me`, and encrypts the returned provider token pair. It refreshes the pair on demand when retrieving Service App credentials.
 
 ## 3. Register a separate customer identity Integration
 
@@ -36,7 +36,7 @@ Create a regular OAuth Integration for customer verification. Select:
 - `spark-admin:people_read` — include the authenticated administrator's assigned roles in their profile.
 - `spark-admin:roles_read` — resolve the administrative role IDs returned on that person's profile.
 
-Use the exact customer redirect URI shown in the setup screen (`http://localhost:3000/oauth/customer/callback` by default). Enter this separate Integration’s client ID and secret in that screen.
+Use the exact customer redirect URI shown in the setup screen (`http://localhost:3000/oauth/customer/callback` by default). Enter this separate Integration’s client ID and secret under **Customer Verification**.
 
 The callback reads `/people/me`, requires a human account, derives its `orgId`, and checks the person's role IDs against the **Full Administrator** role returned by `/roles`. Merely being able to enumerate roles is not accepted as proof. Missing role data or insufficient permission fails closed. In the October 26, 2026 sandbox run, `spark:people_read` plus `spark-admin:roles_read` returned the role catalog but omitted the person's assigned roles. Adding `spark-admin:people_read` returned those assignments and allowed verification. Include the admin people-read scope in both the registration and OAuth request; existing installations must authorize the added permission. Do not relax the check to organization membership if role data is absent.
 
@@ -44,7 +44,7 @@ This is an OAuth API-authorization flow, not an OpenID Connect ID-token flow. It
 
 ## 4. Configure and start live mode
 
-Run `npm ci --ignore-scripts` once, then `npm start`. No environment configuration is required. Open `http://localhost:3000` directly in the provider workspace, without a local login, and choose which Webex registrations you already have. Save complete registration details as you obtain them; blank secret fields retain saved values. Use **Experience** in the sidebar to switch to a customer workspace. Webex OAuth and organization-link confirmation remain required.
+Run `npm ci --ignore-scripts` once, then `npm start`. No environment configuration is required. Open `http://localhost:3000` directly in the provider workspace, without a local login. Under **Developer Connections**, configure **Service App**, **Developer Integration**, and **Customer Verification** on their separate screens. Save complete registration details as you obtain them; blank secret fields retain saved values. Open **Customers** to inspect linked organizations separately from setup. Use **Experience** in the sidebar to switch to a customer workspace. Webex OAuth and organization-link confirmation remain required.
 
 If a legacy `.env` sets `MODE=demo`, use `npm start -- --live` to select live mode without editing environment settings. Without a legacy mode setting, `npm start` defaults to live; `npm start -- --demo` selects the separate demo database. Existing local settings and connections are preserved. Legacy credentials are imported encrypted and the original encryption key is preserved in `.data/master.key`.
 

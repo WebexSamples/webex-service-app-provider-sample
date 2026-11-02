@@ -4,7 +4,7 @@ A small web app for validating **customer-initiated organization linking**. A cu
 
 Two experiences share one backend:
 
-- **Provider administrator:** configure the provider Integration, inspect customer connection metadata, and exercise simulated Control Hub approvals in demo mode. This role cannot view customer directories.
+- **Provider administrator:** configure developer connections, inspect customer connection metadata, and exercise simulated Control Hub approvals in demo mode. This role cannot view customer directories.
 - **Customer administrator:** verify a Webex account, confirm the organization link, read a paginated directory, manage an optional Data Source registration, and disconnect. This role sees only its own provider tenant.
 
 This is an independent sample, not an official onboarding requirement or a production SaaS platform. Webex API behavior is covered by mocked contract tests; live acceptance requires your own registered apps and organization. See [validation](docs/VALIDATION.md).
@@ -26,11 +26,19 @@ npm start
 
 No environment variables, `.env` file, or local account are required. Open **http://localhost:3000** to enter the provider workspace. Use **Experience** in the sidebar to switch between **Provider**, **Summit Outfitters**, and **Northstar Travel**. These are local sample perspectives; Webex OAuth still verifies the developer/customer identity, and linking a customer organization still requires explicit confirmation.
 
-The provider's **Webex registrations** screen supports an existing Service App, an existing provider Integration, both, or neither. For missing registrations, it shows the Webex portal link, required scopes, and exact callbacks. Create those registrations in Webex, then paste their credentials into the app. Customer verification still uses a separate Integration. You can save one complete registration at a time and finish the others later. Add the optional **Service App name** and **Service App manage URL** from My Webex Apps to show the name and a **Manage** link on the configured Service App card. These are saved display details, not automatically synchronized from Webex. Editing them preserves existing connections; replacing the Service App ID clears omitted display details.
+**Developer Connections** contains three separate setup screens:
 
-![Configured Service App with a saved name and management link](docs/screenshots/service-app-details.png)
+1. **Service App** — save its app ID and client credentials. Optional display details show the app's name and a **Manage** link. These details are saved locally, not synchronized from Webex.
+2. **Developer Integration** — save the owning developer's Integration credentials, then select **Connect Webex developer**.
+3. **Customer Verification** — configure the separate Integration used to verify each customer's Webex administrator.
 
-![First-run provider registration choices with no credentials entered](docs/screenshots/provider-setup.png)
+Each sidebar item shows **Needs setup**, **Configured**, **Ready to connect**, or **Connected**. You can start with any registrations you already have; missing steps show their scopes, callback, and My Webex Apps link. Each screen saves only its own settings. Blank secret fields preserve saved credentials.
+
+**Customers** is separate from setup. It lists linked organizations and, in demo mode, simulated Control Hub approvals. **Connection History** has the audit trail. Screens have direct fragment URLs such as `/#service-app`, `/#developer-integration`, and `/#customers`; reload and browser back/forward preserve the selected screen.
+
+![Service App setup with sidebar status indicators](docs/screenshots/provider-setup.png)
+
+![Developer Integration setup and account connection](docs/screenshots/developer-integration.png)
 
 Saved secrets are encrypted in the mode's SQLite database and never returned to the browser. The app generates `.data/master.key` with mode `0600` inside a `0700` directory. Back up that key separately from the databases; losing it makes saved credentials unreadable. Existing `.env` configuration is supported for migration: the app preserves its encryption key and imports the registration credentials into encrypted storage. After verifying the migration and backing up the key, you can remove the old `.env` file. New secrets are managed through the UI.
 
@@ -46,14 +54,14 @@ Demo and live mode have separate databases. Both open without a local login. Dem
 
 ### Try the demo
 
-1. In the **Provider** experience, select **Connect demo Integration**.
-2. Under **Simulated Control Hub**, authorize the Summit Outfitters Webex fixture. Approval does not link or activate any tenant.
+1. In the **Provider** experience, open **Developer Integration** and select **Connect demo Integration**.
+2. Open **Customers**. Under **Simulated Control Hub**, authorize the Summit Outfitters Webex fixture. Approval does not link or activate any tenant.
 3. Switch **Experience** to **Summit Outfitters**.
 4. Select the Summit fixture and **Full Administrator**, then **Verify fixture identity**. Choosing **Organization member** demonstrates the authority denial.
 5. Review the organization and provider account; select **Confirm link and activate Service App**.
 6. Select **Refresh directory**, then **Load more members**. These reads use the saved Service App connection, without retaining a customer OAuth token.
 7. Switch to **Northstar Travel** and try claiming the same Summit Webex fixture. The existing tenant claim blocks it.
-8. Switch to **Provider** and deauthorize the Summit fixture. Refresh the customer status: credentials have been removed and access is disconnected. Reauthorization alone does not reactivate it; verify and confirm again.
+8. Switch to **Provider**, open **Customers**, and deauthorize the Summit fixture. Refresh the customer status: credentials have been removed and access is disconnected. Reauthorization alone does not reactivate it; verify and confirm again.
 
 The permanent **DEMO MODE** banner identifies fixture data. Demo mode makes no Webex requests, and demo mutation endpoints are disabled in live mode. The fixture authority selector is intentionally a simulation, not an authentication mechanism.
 

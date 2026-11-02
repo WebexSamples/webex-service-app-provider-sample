@@ -1,5 +1,7 @@
 let session, state, notice = '', isError = false, busy = false, people = [], hasMore = false;
-let setupCode = '', setupPath = null, settingsOpen = false;
+let setupCode = '', settingsOpen = false;
+const providerPages = ['service-app', 'developer-integration', 'customer-verification', 'customers', 'activity'];
+let providerPage = providerPages.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'service-app';
 const root = document.querySelector('#app');
 function el(tag, props = {}, ...children) {
   const node = document.createElement(tag);
@@ -74,60 +76,86 @@ function bootstrap() {
   el('button', { class: 'button', type: 'submit', disabled: busy }, 'Create provider account'));
   return el('div', {}, portalHeader(), el('main', { id: 'main', class: 'bootstrap-shell' }, banner(), message(), form));
 }
-function providerSettings() {
+function setupStatus(page) {
+  const demo = session.mode === 'demo', c = state.configuration;
+  if (page === 'service-app') return demo || c.serviceApp ? 'Configured' : 'Needs setup';
+  if (page === 'developer-integration') return state.providerConnected ? 'Connected' : demo || c.providerOAuth ? 'Ready to connect' : 'Needs setup';
+  return demo || c.customerOAuth ? 'Configured' : 'Needs setup';
+}
+const nextStep = (page, label) => el('a', { class: 'next-step', href: `#${page}` }, label, el('span', { 'aria-hidden': 'true' }, ' →'));
+function providerSettings(page) {
   const c = state.configuration, saved = state.providerSetup;
-  if (!saved?.managed || session.mode === 'demo') return null;
-  const ready = c.serviceApp && c.providerOAuth && c.customerOAuth;
-  const heading = el('div', { class: 'section-heading' }, el('div', {}, text('p', 'eyebrow', 'PROVIDER ONBOARDING'),
-    text('h2', '', 'Webex registrations')), ready ? button(settingsOpen ? 'Hide registration details' : 'Edit registration details', () => { settingsOpen = !settingsOpen; }, true) : null);
-  if (ready && !settingsOpen) return el('section', { class: 'panel' }, heading,
-    text('p', 'muted', 'Registration credentials are saved. Secrets are encrypted on the server and are never returned to this browser.'));
-  const selected = setupPath || (c.serviceApp ? (c.providerOAuth ? 'both' : 'service') : c.providerOAuth ? 'integration' : 'neither');
-  const choices = el('fieldset', { class: 'setup-choices' }, el('legend', {}, 'What do you already have?'),
-    [['both', 'Service App and Integration'], ['service', 'Service App only'], ['integration', 'Integration only'], ['neither', 'Neither yet']]
-      .map(([value, label]) => el('label', {}, el('input', { type: 'radio', name: 'setupPath', value, checked: selected === value,
-        onChange: () => { setupPath = value; render(); } }), label)));
-  const portal = () => el('a', { href: 'https://developer.webex.com/my-apps', target: '_blank', rel: 'noopener noreferrer' }, 'Open My Webex Apps');
-  const registration = (title, help, scope, callback, fields) => el('fieldset', { class: 'registration' }, el('legend', {}, title),
-    text('p', 'muted', help), portal(), text('p', 'fine scopes', `Scopes: ${scope}`),
-    !callback ? text('p', 'fine', 'For own-org testing, request admin authorization in the Service App details, then have a Full Administrator approve it in Control Hub. External customer organizations require App Hub approval.') : null,
-    callback ? el('p', { class: 'fine' }, 'Redirect URI: ', text('code', 'identifier', `${session.baseUrl}${callback}`)) : null, fields);
-  const secret = (label, key, configured) => field(label, key, 'password', '', {
-    maxlength: '2048', placeholder: configured ? 'Saved · leave blank to keep' : 'Paste the client secret', autocomplete: 'off' });
+  const service = page === 'service-app', developer = page === 'developer-integration';
+  const title = service ? 'Service App' : developer ? 'Developer Integration' : 'Customer Verification';
+  const ready = service ? c.serviceApp : developer ? c.providerOAuth : c.customerOAuth;
+  const description = service ? 'The Service App acts on behalf of each customer organization after its administrator approves access.'
+    : developer ? 'Connect the Webex developer who owns your Service App. This Integration retrieves customer-specific Service App tokens.'
+      : 'A separate Integration verifies each customer’s Webex administrator before the customer confirms an organization link.';
+  const next = service ? nextStep('developer-integration', 'Continue to Developer Integration')
+    : developer ? null : nextStep('customers', 'Open Customers');
+  const heading = el('div', { class: 'section-heading' }, text('h2', '', title), pill(setupStatus(page)));
+  if (session.mode === 'demo') return el('section', { class: 'panel' }, heading, text('p', 'muted', description),
+    text('p', 'fine', 'This demo uses a fixture registration. No Webex credentials are needed.'), next);
+  const portal = el('a', { href: 'https://developer.webex.com/my-apps', target: '_blank', rel: 'noopener noreferrer' }, 'Open My Webex Apps');
+  const details = service && ready ? el('div', { class: 'service-app-details' },
+    text('h3', '', saved.serviceApp.name || 'Your Service App'),
+    saved.serviceApp.manageUrl ? el('a', { href: saved.serviceApp.manageUrl, target: '_blank', rel: 'noopener noreferrer', 'aria-label': 'Manage Service App' }, 'Manage') : portal) : null;
+  if (ready && !settingsOpen) return el('section', { class: 'panel' }, heading, text('p', 'muted', description), details,
+    button(`Edit ${title}`, () => { settingsOpen = true; }, true), next);
+  if (!saved?.managed) return el('section', { class: 'panel' }, heading, text('p', 'muted', description));
+  const secret = (label, key) => field(label, key, 'password', '', {
+    maxlength: '2048', placeholder: ready ? 'Saved · leave blank to keep' : 'Paste the client secret', autocomplete: 'off' });
+  const inputs = service ? [
+    field('Service App name (optional)', 'SERVICE_APP_NAME', 'text', saved.serviceApp.name, { maxlength: '200' }),
+    field('Service App manage URL (optional)', 'SERVICE_APP_MANAGE_URL', 'url', saved.serviceApp.manageUrl, { maxlength: '2048', placeholder: 'https://developer.webex.com/my-apps/your-service-app' }),
+    field('Service App ID', 'SERVICE_APP_ID', 'text', saved.serviceAppId, { maxlength: '2048', required: true }),
+    field('Service App client ID', 'SERVICE_APP_CLIENT_ID', 'text', saved.serviceAppClientId, { maxlength: '2048', required: true }),
+    secret('Service App client secret', 'SERVICE_APP_CLIENT_SECRET'),
+    el('details', { class: 'registration' }, el('summary', {}, 'Optional Data Source and webhooks'),
+      text('p', 'fine', 'For Data Sources, add spark-admin:datasource_read and spark-admin:datasource_write, select the schema and receiver domain on the Service App, and have the customer administrator reauthorize it.'),
+      field('Data Source schema ID', 'DATASOURCE_SCHEMA_ID', 'text', saved.dataSourceSchemaId, { maxlength: '36' }),
+      field('Data Source endpoint base URL', 'DATASOURCE_BASE_URL', 'url', saved.dataSourceBaseUrl, { maxlength: '2048', placeholder: 'https://connector.example.com' }),
+      text('p', 'fine', 'The sample adds /customers/<provider-customer-id> to this base URL. Leave both fields blank if unused.'),
+      field('Optional webhook signing secret', 'WEBHOOK_SECRET', 'password', '', { maxlength: '2048', placeholder: c.webhook ? 'Saved · leave blank to keep' : 'Leave blank if unused' }))
+  ] : developer ? [
+    field('Developer Integration client ID', 'PROVIDER_INTEGRATION_CLIENT_ID', 'text', saved.providerClientId, { maxlength: '2048', required: true }),
+    secret('Developer Integration client secret', 'PROVIDER_INTEGRATION_CLIENT_SECRET')
+  ] : [field('Customer Integration client ID', 'CUSTOMER_INTEGRATION_CLIENT_ID', 'text', saved.customerClientId, { maxlength: '2048', required: true }),
+    secret('Customer Integration client secret', 'CUSTOMER_INTEGRATION_CLIENT_SECRET')];
+  const scopes = service ? 'spark-admin:people_read, spark-admin:organizations_read'
+    : developer ? 'spark:people_read, spark:applications_token' : 'spark:people_read, spark-admin:people_read, spark-admin:roles_read';
   const form = el('form', { class: 'settings-form', onSubmit: event => {
-    event.preventDefault(); const values = new FormData(event.target);
-    const body = Object.fromEntries([...values.entries()].filter(([key]) => key !== 'setupPath'));
-    run(async () => { await api('/api/provider/settings', body); settingsOpen = false; setupPath = null; notice = 'Available registrations saved securely. Connect the provider Integration when ready.'; });
-  } }, choices,
-  text('p', 'fine', 'For missing registrations, create them in Webex and return here with their credentials. The sample does not create Webex apps or accept their terms for you.'),
-  registration('1. Service App', ['both', 'service'].includes(selected)
-    ? 'Use your existing Service App. Confirm that it requests the directory scopes below.'
-    : 'In My Webex Apps, choose Create a New App → Create a Service App. Copy the App ID, client ID, and client secret.',
-    'spark-admin:people_read, spark-admin:organizations_read', null,
-    [field('Service App name (optional)', 'SERVICE_APP_NAME', 'text', saved.serviceApp.name, { maxlength: '200' }),
-      field('Service App manage URL (optional)', 'SERVICE_APP_MANAGE_URL', 'url', saved.serviceApp.manageUrl, { maxlength: '2048', placeholder: 'https://developer.webex.com/my-apps/your-service-app' }),
-      field('Service App ID', 'SERVICE_APP_ID', 'text', saved.serviceAppId, { maxlength: '2048' }),
-      field('Service App client ID', 'SERVICE_APP_CLIENT_ID', 'text', saved.serviceAppClientId, { maxlength: '2048' }),
-      secret('Service App client secret', 'SERVICE_APP_CLIENT_SECRET', c.serviceApp)]),
-  registration('2. Provider Integration', ['both', 'integration'].includes(selected)
-    ? 'Use an Integration owned by the Service App developer. Add the scopes and redirect URI below.'
-    : 'Create a separate Integration for the developer who owns the Service App. Add the scopes and redirect URI below.',
-    'spark:people_read, spark:applications_token', '/oauth/provider/callback',
-    [field('Provider Integration client ID', 'PROVIDER_INTEGRATION_CLIENT_ID', 'text', saved.providerClientId, { maxlength: '2048' }),
-      secret('Provider Integration client secret', 'PROVIDER_INTEGRATION_CLIENT_SECRET', c.providerOAuth)]),
-  registration('3. Customer verification Integration', 'Use a separate Integration for customer Webex verification. It requests read access to verify the assigned Full Administrator role.',
-    'spark:people_read, spark-admin:people_read, spark-admin:roles_read', '/oauth/customer/callback',
-    [field('Customer Integration client ID', 'CUSTOMER_INTEGRATION_CLIENT_ID', 'text', saved.customerClientId, { maxlength: '2048' }),
-      secret('Customer Integration client secret', 'CUSTOMER_INTEGRATION_CLIENT_SECRET', c.customerOAuth)]),
-  el('fieldset', { class: 'registration' }, el('legend', {}, 'Optional Data Source example'),
-    text('p', 'muted', 'Add spark-admin:datasource_read and spark-admin:datasource_write to the Service App. Select its data exchange schema and domain, then have the Full Administrator reauthorize those changes.'),
-    field('Data Source schema ID', 'DATASOURCE_SCHEMA_ID', 'text', saved.dataSourceSchemaId, { maxlength: '36', placeholder: 'Schema UUID selected on the Service App' }),
-    field('Data Source endpoint base URL', 'DATASOURCE_BASE_URL', 'url', saved.dataSourceBaseUrl, { maxlength: '2048', placeholder: 'https://connector.example.com' }),
-    text('p', 'fine', 'The sample appends /customers/<provider-customer-id> to this base URL. Host a compatible receiver there and use a domain approved on the Service App. Leave both fields empty to keep this example unconfigured.')),
-  field('Optional webhook signing secret', 'WEBHOOK_SECRET', 'password', '', { maxlength: '2048', placeholder: c.webhook ? 'Saved · leave blank to keep' : 'Leave blank if not using lifecycle webhooks' }),
-  text('p', 'fine', 'Blank secret fields keep saved secrets. Supply all fields for each registration you add. Disconnect customer organizations before replacing registrations.'),
-  el('button', { class: 'button', type: 'submit', disabled: busy }, 'Save available registrations'));
-  return el('section', { class: 'panel' }, heading, form);
+    event.preventDefault(); const body = Object.fromEntries(new FormData(event.target));
+    run(async () => { await api('/api/provider/settings', body); settingsOpen = false; notice = `${title} saved securely.`; });
+  } }, text('p', 'fine', `Create or open your ${service ? 'Service App' : 'Integration'} in My Webex Apps, then enter its details here.`), portal,
+    text('p', 'fine scopes', `Scopes: ${scopes}`),
+    service ? text('p', 'fine', 'For own-org testing, request admin authorization on the Service App and approve it in Control Hub. External customer organizations require App Hub approval.')
+      : el('p', { class: 'fine' }, 'Redirect URI: ', text('code', 'identifier', `${session.baseUrl}/oauth/${developer ? 'provider' : 'customer'}/callback`)),
+    inputs, text('p', 'fine', 'Blank secret fields keep saved secrets. Disconnect customer organizations before replacing registrations.'),
+    el('button', { class: 'button', type: 'submit', disabled: busy }, `Save ${title}`));
+  return el('section', { class: 'panel' }, heading, text('p', 'muted', description), form, ready ? next : null);
+}
+function developerConnection() {
+  const demo = session.mode === 'demo';
+  const connect = demo ? button(state.providerConnected ? 'Reconnect demo Integration' : 'Connect demo Integration', async () => {
+    await api('/api/demo/provider', {}); notice = 'Demo provider Integration connected.';
+  }) : button(state.providerConnected ? 'Reconnect Webex developer' : 'Connect Webex developer', () => oauth('provider'));
+  if (!demo && !state.configuration.providerOAuth) connect.setAttribute('disabled', '');
+  return el('section', { class: 'panel' }, el('div', {}, text('h2', '', 'Connect your Webex developer account'),
+    text('p', 'muted', 'Use the account that owns the Service App. Customers will verify their own Webex accounts separately.')),
+    el('div', { class: 'setup-action' }, pill(state.providerConnected ? 'Connected' : 'Not connected'), connect),
+    state.providerConnected ? nextStep('customer-verification', 'Continue to Customer Verification') : null);
+}
+function providerNavigation() {
+  const entry = (page, label, status) => el('a', { class: providerPage === page ? 'nav-active' : '', href: `#${page}`,
+    'aria-current': providerPage === page ? 'page' : null }, text('span', '', label),
+    status ? el('small', { class: `nav-status ${status === 'Needs setup' ? 'pending' : status === 'Ready to connect' ? 'ready' : 'complete'}` },
+      text('span', 'status-dot', ''), status) : null);
+  return el('nav', { 'aria-label': 'Provider navigation' }, text('p', 'nav-group', 'Developer Connections'),
+    entry('service-app', 'Service App', setupStatus('service-app')),
+    entry('developer-integration', 'Developer Integration', setupStatus('developer-integration')),
+    entry('customer-verification', 'Customer Verification', setupStatus('customer-verification')),
+    text('p', 'nav-group', 'Customer Organizations'), entry('customers', 'Customers'), entry('activity', 'Connection History'));
 }
 function customerAccounts() {
   if (session.localAccess || !state.providerSetup?.managed) return null;
@@ -173,23 +201,8 @@ function auditPanel() {
       el('time', {}, date(event.at))))) : text('p', 'muted', 'Connection activity will appear here.'));
 }
 function provider() {
-  const connectionButton = session.mode === 'demo'
-    ? button(state.providerConnected ? 'Reconnect demo Integration' : 'Connect demo Integration', async () => { await api('/api/demo/provider', {}); notice = 'Demo provider Integration connected.'; })
-    : button('Connect provider Integration', () => oauth('provider'));
-  if (session.mode === 'live' && !state.configuration.providerOAuth) connectionButton.setAttribute('disabled', '');
-  const config = state.configuration;
-  const setup = el('section', { class: 'panel provider-setup' },
-    el('div', {}, text('p', 'eyebrow', 'PROVIDER SETUP'), text('h2', '', 'Token-management connection'),
-      text('p', 'muted', session.mode === 'demo' ? 'Connect the fixture provider Integration to exercise customer onboarding without Webex credentials.'
-        : 'Connect as the Webex developer who owns the Service App. The first verified developer identity is saved for later connections. Customer sign-in uses its separate Integration.')),
-    el('div', { class: 'setup-action' }, pill(state.providerConnected ? 'Connected' : 'Not connected'), connectionButton));
-  const configurations = session.mode === 'live' ? el('section', { class: 'config-grid' },
-    Object.entries({ 'Service App': config.serviceApp, 'Provider OAuth': config.providerOAuth, 'Customer OAuth': config.customerOAuth, 'Webhook secret': config.webhook })
-      .map(([name, ready]) => el('div', { class: 'config-item' }, text('span', '', name),
-        name === 'Service App' && ready && state.providerSetup.serviceApp.name ? text('strong', '', state.providerSetup.serviceApp.name) : null,
-        text('strong', ready ? 'good' : 'muted', ready ? 'Configured' : 'Needs setup'),
-        name === 'Service App' && ready && state.providerSetup.serviceApp.manageUrl ? el('a', {
-          href: state.providerSetup.serviceApp.manageUrl, target: '_blank', rel: 'noopener noreferrer', 'aria-label': 'Manage Service App' }, 'Manage') : null))) : null;
+  if (providerPage === 'activity') return auditPanel();
+  if (providerPage !== 'customers') return [providerSettings(providerPage), providerPage === 'developer-integration' ? developerConnection() : null];
   const demo = session.mode === 'demo' ? el('section', { class: 'panel demo-controls' },
     text('p', 'eyebrow', 'SIMULATED CONTROL HUB'), text('h2', '', 'Customer Service App approvals'),
     text('p', 'muted', 'These switches simulate a Full Admin’s Control Hub action. Approval alone never links a provider account or activates the connection.'),
@@ -201,9 +214,14 @@ function provider() {
   const rows = state.tenants.map(t => el('tr', {}, el('td', {}, text('strong', '', t.name), text('small', 'muted', t.id)),
     el('td', {}, t.orgName || 'No confirmed link', text('small', 'identifier', t.orgId || '')), el('td', {}, pill(t.status),
       text('small', 'muted', t.credentialExpiresAt ? `Access token expires ${date(t.credentialExpiresAt)}` : 'No stored credentials')), el('td', {}, date(t.lastChecked))));
-  return [providerSettings(), setup, configurations, customerAccounts(), demo, el('section', { class: 'panel' }, text('p', 'eyebrow', 'PROVIDER ACCOUNTS'), text('h2', '', 'Customer connections'),
-    text('p', 'muted', 'Connection metadata only. Customer directories and secret values are not shown in this console.'),
-    el('div', { class: 'table-scroll' }, el('table', {}, el('thead', {}, el('tr', {}, ['Customer', 'Webex organization', 'Connection', 'Last successful read'].map(h => el('th', { scope: 'col' }, h)))), el('tbody', {}, rows)))), auditPanel()];
+  const incomplete = session.mode === 'live' && (!state.configuration.serviceApp || !state.configuration.providerOAuth
+    || !state.configuration.customerOAuth || !state.providerConnected);
+  return [incomplete ? el('section', { class: 'panel setup-reminder' }, text('h2', '', 'Finish developer setup'),
+    text('p', 'muted', 'Configure the Service App and both Integrations, then connect your Webex developer account before onboarding a customer.'),
+    nextStep(!state.configuration.serviceApp ? 'service-app' : !state.configuration.providerOAuth || !state.providerConnected ? 'developer-integration' : 'customer-verification', 'Continue setup')) : null,
+    customerAccounts(), demo, el('section', { class: 'panel' }, text('h2', '', 'Customer organizations'),
+    text('p', 'muted', 'Organizations linked to your provider customers. Customer directories and secrets stay in each customer workspace.'),
+    el('div', { class: 'table-scroll' }, el('table', {}, el('thead', {}, el('tr', {}, ['Customer', 'Webex organization', 'Connection', 'Last successful read'].map(h => el('th', { scope: 'col' }, h)))), el('tbody', {}, rows))))];
 }
 function customer() {
   const t = state.tenants[0];
@@ -295,9 +313,9 @@ function render() {
   const isProvider = session.account.role === 'provider';
   root.replaceChildren(portalHeader(), el('div', { class: 'app-shell' },
     el('aside', { class: 'sidebar' }, text('p', 'eyebrow sidebar-label', isProvider ? 'PROVIDER EXPERIENCE' : 'CUSTOMER EXPERIENCE'),
-      el('nav', { 'aria-label': isProvider ? 'Provider navigation' : 'Customer navigation' },
-        el('a', { class: 'nav-active', href: '#main', 'aria-current': 'page' }, isProvider ? 'Customer connections' : 'Webex organization')),
-      el('div', { class: 'sidebar-note' }, text('strong', '', 'Customer-initiated onboarding'), text('p', '', 'Verify identity, review the organization, and confirm the account link.')),
+      isProvider ? providerNavigation() : el('nav', { 'aria-label': 'Customer navigation' },
+        el('a', { class: 'nav-active', href: '#main', 'aria-current': 'page' }, 'Webex organization')),
+      !isProvider ? el('div', { class: 'sidebar-note' }, text('strong', '', 'Customer-initiated onboarding'), text('p', '', 'Verify identity, review the organization, and confirm the account link.')) : null,
       el('div', { class: `account${session.localAccess ? ' local-workspace' : ''}` }, text('strong', '', session.account.name),
         session.localAccess ? el('div', { class: 'form-field' }, el('label', { for: 'perspective' }, 'Experience'),
           el('select', { id: 'perspective', disabled: busy, onChange: event => {
@@ -308,11 +326,16 @@ function render() {
           text('small', '', 'Local workspace · no app login'))
           : [text('small', '', session.account.email), button('Sign out', async () => { await api('/api/logout', {}); people = []; notice = ''; }, true)])),
     el('main', { id: 'main', class: 'workspace', 'aria-busy': busy }, banner(),
-      el('header', { class: 'page-heading' }, el('div', {}, text('p', 'eyebrow', 'SERVICE APP STUDIO'), text('h1', '', isProvider ? 'Customer connections' : 'Your Webex organization')),
+      el('header', { class: 'page-heading' }, el('div', {}, text('p', 'eyebrow', 'SERVICE APP STUDIO'), text('h1', '', isProvider ? (providerPage === 'customers' ? 'Customers' : providerPage === 'activity' ? 'Connection History' : 'Developer Connections') : 'Your Webex organization')),
         button('Refresh status', async () => { people = []; hasMore = false; }, true)), message(),
       state ? (isProvider ? provider() : customer()) : text('p', '', 'Loading connection status…'),
       text('footer', 'fine', 'Webex developer sample · Directory and Data Source examples · Secrets stay on the server'))));
 }
+window.addEventListener('hashchange', () => {
+  const page = location.hash.slice(1);
+  if (!providerPages.includes(page)) return;
+  providerPage = page; settingsOpen = false; notice = ''; isError = false; render();
+});
 try {
   const fragment = new URLSearchParams(location.hash.slice(1));
   setupCode = fragment.get('setup') || '';
@@ -321,6 +344,6 @@ try {
   await refresh();
   const query = new URLSearchParams(window.location.search);
   notice = query.get('notice') || '';
-  if (query.has('notice')) history.replaceState(null, '', '/');
+  if (query.has('notice')) history.replaceState(null, '', location.pathname + location.hash);
   render();
 } catch (error) { root.replaceChildren(el('main', { id: 'main', class: 'loading' }, text('h1', '', 'Could not open the sample'), text('p', '', error.message))); }
