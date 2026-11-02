@@ -342,6 +342,39 @@ test('provider credentials are encrypted, write-only, validated, and cannot chan
   assert.equal(f.config.SERVICE_APP_CLIENT_SECRET, secret);
 });
 
+test('Service App display details persist without replacing credentials or exposing them to customers', async t => {
+  const f = await fixture(t, 'demo', undefined, { managedConfiguration: true });
+  const details = { SERVICE_APP_NAME: 'Sample Directory Service App',
+    SERVICE_APP_MANAGE_URL: 'https://developer.webex.com/my-apps/sample-directory-service-app' };
+  const providerTokens = vault(f.config.ENCRYPTION_KEY).seal({ access_token: random() }, 'provider');
+  f.store.setting('provider_tokens', providerTokens);
+  await approve(f); await connect(f.summit);
+  const credentials = f.store.get("SELECT credentials FROM tenants WHERE id='summit'").credentials;
+  assert.equal((await f.summit.request('/api/provider/settings', details)).status, 403);
+  assert.equal((await f.provider.request('/api/provider/settings', details)).status, 200);
+  assert.equal(f.store.setting('provider_tokens'), providerTokens);
+  assert.equal(f.config.PROVIDER_WEBEX_PERSON_ID, 'developer-person');
+  assert.equal(f.store.get("SELECT credentials FROM tenants WHERE id='summit'").credentials, credentials);
+  assert.deepEqual((await f.provider.request('/api/state')).data.providerSetup.serviceApp,
+    { name: details.SERVICE_APP_NAME, manageUrl: details.SERVICE_APP_MANAGE_URL });
+  assert.equal((await f.summit.request('/api/state')).data.providerSetup, undefined);
+  for (const link of ['javascript:alert(1)', 'https://evil.example/my-apps/sample',
+    'https://developer.webex.com.evil.example/my-apps/sample', 'https://developer.webex.com/my-apps/sample?token=private',
+    'https://user@developer.webex.com/my-apps/sample', 'https://developer.webex.com/my-apps/../sample']) {
+    assert.equal((await f.provider.request('/api/provider/settings', { SERVICE_APP_MANAGE_URL: link })).status, 400);
+  }
+  assert.equal((await f.provider.request('/api/provider/settings', { SERVICE_APP_NAME: 'x'.repeat(201) })).status, 400);
+  const restoredConfig = { MODE: 'demo', BASE_URL: f.config.BASE_URL, ENCRYPTION_KEY: f.config.ENCRYPTION_KEY };
+  const restored = createApp(restoredConfig, f.store, { managedConfiguration: true });
+  assert.equal(restoredConfig.SERVICE_APP_NAME, details.SERVICE_APP_NAME);
+  restored.close();
+  await f.summit.request('/api/disconnect', { confirm: true });
+  assert.equal((await f.provider.request('/api/provider/settings', { SERVICE_APP_ID: 'new-app',
+    SERVICE_APP_CLIENT_ID: 'new-client', SERVICE_APP_CLIENT_SECRET: random() })).status, 200);
+  assert.equal(f.config.SERVICE_APP_NAME, '');
+  assert.equal(f.config.SERVICE_APP_MANAGE_URL, '');
+});
+
 test('the first provider OAuth pins the developer; stale callbacks and later identities cannot replace it', async t => {
   let person = 'first-developer';
   const fake = {

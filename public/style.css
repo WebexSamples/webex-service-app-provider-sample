@@ -125,7 +125,7 @@ button.button:disabled { opacity: .55; cursor: wait; }
 .notice.error { background: #fff1f1; border-color: #efb6bd; color: #ab0a15; }
 .panel { background: var(--white); border: 1px solid var(--line); border-radius: 6px; padding: 28px; margin-bottom: 24px; }
 .panel > .muted { font-size: .875rem; }
-.config-item { padding: 16px; border: 1px solid var(--line); background: var(--white); border-radius: 4px; font-size: .8rem; line-height: 1.8; }
+.config-item { overflow-wrap: anywhere; padding: 16px; border: 1px solid var(--line); background: var(--white); border-radius: 4px; font-size: .8rem; line-height: 1.8; }
 .config-item strong { display: block; }
 .org-item { padding: 22px; background: var(--paper); border: 1px solid var(--line); border-radius: 4px; }
 .org-item .pill { display: table; margin-bottom: 18px; }

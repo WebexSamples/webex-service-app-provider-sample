@@ -38,6 +38,12 @@ JavaScript checks and all 33 Node tests passed. New HTTP coverage checks account
 
 The isolated Chromium walkthrough used password-free provider/customer contexts for the full fixture flow: member denial, explicit linking, pagination, duplicate-organization denial, Data Source register/read/renew/remove, reload persistence, disconnect/reconnect, and deauthorization. Fresh installation and restart without environment configuration restored encrypted registration settings without asking for a password. Desktop and 320px/390px screenshots were inspected and refreshed. The existing local installation also opened directly and switched perspectives without changing saved Webex registrations. No new Webex OAuth grant, live Data Source operation, or external deployment was performed for this change.
 
+## Configured Service App details — November 2, 2026
+
+The provider can save an optional Service App name and Developer Portal detail URL. The configured card displays both. These are manually supplied display metadata, not an API lookup or credential-ownership check. Management links accept only HTTPS app-detail routes on `developer.webex.com`; names render as text.
+
+JavaScript checks and 34 Node tests passed. New coverage checks persistence, provider-only access, unsafe URL rejection, unchanged provider/customer credentials during metadata updates, and clearing omitted metadata when replacing the Service App ID. The browser walkthrough checked the configured name/link, encrypted-settings restart, and 320px/390px layouts. The existing local installation was populated with the user-provided name and management URL; no new Webex API calls or access grants were needed.
+
 ## Data Source example — October 31, 2026
 
 JavaScript syntax checks and 30 Node tests passed. Added contracts cover the fixed-origin Data Source POST/GET/PUT/DELETE paths, Service App bearer context, complete renewal payload, 204 deletion, already-removed 404 handling, and sanitized Data Source scope denials. Registration writes are not retried automatically after an ambiguous response. Setup validation rejects incomplete schema/URL pairs and endpoint credentials, query strings, fragments, local/IP destinations, and non-default ports.

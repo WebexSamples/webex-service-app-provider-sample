@@ -42,6 +42,8 @@ def first_run_smoke(browser):
             page.set_viewport_size({"width": 1440, "height": 1100})
             page.screenshot(path=str(ARTIFACTS / "provider-setup.png"))
             for label, value in [
+                ("Service App name (optional)", "Sample Directory Service App"),
+                ("Service App manage URL (optional)", "https://developer.webex.com/my-apps/sample-directory-service-app"),
                 ("Service App ID", "sample-service-app"), ("Service App client ID", "sample-service-client"),
                 ("Service App client secret", client_secret), ("Provider Integration client ID", "sample-provider-client"),
                 ("Provider Integration client secret", client_secret), ("Customer Integration client ID", "sample-customer-client"),
@@ -52,6 +54,13 @@ def first_run_smoke(browser):
                 page.get_by_label(label, exact=True).fill(value)
             page.get_by_role("button", name="Save available registrations", exact=True).click()
             expect(page.get_by_role("status")).to_contain_text("saved securely")
+            expect(page.locator(".config-grid")).to_contain_text("Sample Directory Service App")
+            expect(page.get_by_role("link", name="Manage Service App", exact=True)).to_have_attribute("href", "https://developer.webex.com/my-apps/sample-directory-service-app")
+            for width in [320, 390]:
+                page.set_viewport_size({"width": width, "height": 844})
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "Service App details overflow on mobile"
+            page.set_viewport_size({"width": 1440, "height": 1100})
+            page.locator(".config-grid").screenshot(path=str(ARTIFACTS / "service-app-details.png"))
             page.get_by_label("Experience", exact=True).select_option("summit")
             expect(page.get_by_role("heading", name="Your Webex organization", exact=True)).to_be_visible()
             expect(page.get_by_role("button", name="Verify with Webex →", exact=True)).to_be_visible()
@@ -78,6 +87,8 @@ def first_run_smoke(browser):
             page.screenshot(path=str(ARTIFACTS / "local-provider.png"))
             page.get_by_role("button", name="Edit registration details", exact=True).click()
             expect(page.get_by_label("Service App ID", exact=True)).to_have_value("sample-service-app")
+            expect(page.get_by_label("Service App name (optional)", exact=True)).to_have_value("Sample Directory Service App")
+            expect(page.get_by_label("Service App manage URL (optional)", exact=True)).to_have_value("https://developer.webex.com/my-apps/sample-directory-service-app")
             expect(page.get_by_label("Data Source endpoint base URL", exact=True)).to_have_value("https://connector.example.com")
             expect(page.get_by_label("Service App client secret", exact=True)).to_have_value("")
             expect(page.get_by_label("Service App client secret", exact=True)).to_have_attribute("placeholder", "Saved · leave blank to keep")

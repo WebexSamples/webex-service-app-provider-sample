@@ -26,7 +26,9 @@ npm start
 
 No environment variables, `.env` file, or local account are required. Open **http://localhost:3000** to enter the provider workspace. Use **Experience** in the sidebar to switch between **Provider**, **Summit Outfitters**, and **Northstar Travel**. These are local sample perspectives; Webex OAuth still verifies the developer/customer identity, and linking a customer organization still requires explicit confirmation.
 
-The provider's **Webex registrations** screen supports an existing Service App, an existing provider Integration, both, or neither. For missing registrations, it shows the Webex portal link, required scopes, and exact callbacks. Create those registrations in Webex, then paste their credentials into the app. Customer verification still uses a separate Integration. You can save one complete registration at a time and finish the others later.
+The provider's **Webex registrations** screen supports an existing Service App, an existing provider Integration, both, or neither. For missing registrations, it shows the Webex portal link, required scopes, and exact callbacks. Create those registrations in Webex, then paste their credentials into the app. Customer verification still uses a separate Integration. You can save one complete registration at a time and finish the others later. Add the optional **Service App name** and **Service App manage URL** from My Webex Apps to show the name and a **Manage** link on the configured Service App card. These are saved display details, not automatically synchronized from Webex. Editing them preserves existing connections; replacing the Service App ID clears omitted display details.
+
+![Configured Service App with a saved name and management link](docs/screenshots/service-app-details.png)
 
 ![First-run provider registration choices with no credentials entered](docs/screenshots/provider-setup.png)
 

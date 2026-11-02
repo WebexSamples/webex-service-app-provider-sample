@@ -104,7 +104,9 @@ function providerSettings() {
     ? 'Use your existing Service App. Confirm that it requests the directory scopes below.'
     : 'In My Webex Apps, choose Create a New App → Create a Service App. Copy the App ID, client ID, and client secret.',
     'spark-admin:people_read, spark-admin:organizations_read', null,
-    [field('Service App ID', 'SERVICE_APP_ID', 'text', saved.serviceAppId, { maxlength: '2048' }),
+    [field('Service App name (optional)', 'SERVICE_APP_NAME', 'text', saved.serviceApp.name, { maxlength: '200' }),
+      field('Service App manage URL (optional)', 'SERVICE_APP_MANAGE_URL', 'url', saved.serviceApp.manageUrl, { maxlength: '2048', placeholder: 'https://developer.webex.com/my-apps/your-service-app' }),
+      field('Service App ID', 'SERVICE_APP_ID', 'text', saved.serviceAppId, { maxlength: '2048' }),
       field('Service App client ID', 'SERVICE_APP_CLIENT_ID', 'text', saved.serviceAppClientId, { maxlength: '2048' }),
       secret('Service App client secret', 'SERVICE_APP_CLIENT_SECRET', c.serviceApp)]),
   registration('2. Provider Integration', ['both', 'integration'].includes(selected)
@@ -183,7 +185,11 @@ function provider() {
     el('div', { class: 'setup-action' }, pill(state.providerConnected ? 'Connected' : 'Not connected'), connectionButton));
   const configurations = session.mode === 'live' ? el('section', { class: 'config-grid' },
     Object.entries({ 'Service App': config.serviceApp, 'Provider OAuth': config.providerOAuth, 'Customer OAuth': config.customerOAuth, 'Webhook secret': config.webhook })
-      .map(([name, ready]) => el('div', { class: 'config-item' }, text('span', '', name), text('strong', ready ? 'good' : 'muted', ready ? 'Configured' : 'Needs setup')))) : null;
+      .map(([name, ready]) => el('div', { class: 'config-item' }, text('span', '', name),
+        name === 'Service App' && ready && state.providerSetup.serviceApp.name ? text('strong', '', state.providerSetup.serviceApp.name) : null,
+        text('strong', ready ? 'good' : 'muted', ready ? 'Configured' : 'Needs setup'),
+        name === 'Service App' && ready && state.providerSetup.serviceApp.manageUrl ? el('a', {
+          href: state.providerSetup.serviceApp.manageUrl, target: '_blank', rel: 'noopener noreferrer', 'aria-label': 'Manage Service App' }, 'Manage') : null))) : null;
   const demo = session.mode === 'demo' ? el('section', { class: 'panel demo-controls' },
     text('p', 'eyebrow', 'SIMULATED CONTROL HUB'), text('h2', '', 'Customer Service App approvals'),
     text('p', 'muted', 'These switches simulate a Full Admin’s Control Hub action. Approval alone never links a provider account or activates the connection.'),
